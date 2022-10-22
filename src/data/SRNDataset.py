@@ -51,7 +51,7 @@ class SRNDataset(torch.utils.data.Dataset):
             self.z_near = 1.25
             self.z_far = 2.75
         else:
-            self.z_near = 0.8
+            self.z_near = 0.2
             self.z_far = 1.8
         self.lindisp = False
 
