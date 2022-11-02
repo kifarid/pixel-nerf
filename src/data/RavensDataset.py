@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from util import get_image_to_tensor_balanced, get_mask_to_tensor
 
 
-class SRNDataset(torch.utils.data.Dataset):
+class RDataset(torch.utils.data.Dataset):
     """
     Dataset from SRN (V. Sitzmann et al. 2020)
     """
@@ -50,12 +50,8 @@ class SRNDataset(torch.utils.data.Dataset):
             torch.tensor([1, -1, -1, 1], dtype=torch.float32)
         )
 
-        if is_chair:
-            self.z_near = 1.25
-            self.z_far = 2.75
-        else:
-            self.z_near = 0.2
-            self.z_far = 1.8
+        self.z_near = 0.1
+        self.z_far = 2
         self.lindisp = False
 
     def __len__(self):
