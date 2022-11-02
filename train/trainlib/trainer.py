@@ -4,6 +4,7 @@ import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 import tqdm
 import warnings
+import wandb
 
 
 class Trainer:
@@ -39,6 +40,8 @@ class Trainer:
         self.accu_grad = conf.get_int("accu_grad", 1)
         self.summary_path = os.path.join(args.logs_path, args.name)
         self.writer = SummaryWriter(self.summary_path)
+
+        self.wandb = conf.get_bool("wandb")
 
         self.fixed_test = hasattr(args, "fixed_test") and args.fixed_test
 
@@ -103,6 +106,15 @@ class Trainer:
 
         self.visual_path = os.path.join(self.args.visual_path, self.args.name)
         self.conf = conf
+
+        if self.wandb:
+            os.environ["WANDB_API_KEY"] = 'cff06ca1fa10f98d7fde3bf619ee5ec8550aba11'
+            wandb.init(entity=conf.get_string('wandb_entity', 'kifarid'),
+                       project=conf.get_string('wandb_project', 'Nerf_for_control'),
+                       dir=self.summary_path,
+                       config=self.conf)
+
+            wandb.tensorboard.patch(root_logdir=str(self.summary_path))
 
     def post_batch(self, epoch, batch):
         """
@@ -221,12 +233,15 @@ class Trainer:
                             import imageio
 
                             vis_u8 = (vis * 255).astype(np.uint8)
-                            imageio.imwrite(
-                                os.path.join(
-                                    self.visual_path,
-                                    "{:04}_{:04}_vis.png".format(epoch, batch),
-                                ),
-                                vis_u8,
+                            # imageio.imwrite(
+                            #     os.path.join(
+                            #         self.visual_path,
+                            #         "{:04}_{:04}_vis.png".format(epoch, batch),
+                            #     ),
+                            #     vis_u8,
+                            # )
+                            self.writer.add_image(
+                                "vis_img", vis_u8, global_step=step_id
                             )
 
                     if (
