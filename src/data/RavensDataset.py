@@ -51,7 +51,7 @@ class RDataset(torch.utils.data.Dataset):
         )
 
         self.z_near = 0.1
-        self.z_far = 2
+        self.z_far = 1.6
         self.lindisp = False
 
     def __len__(self):
