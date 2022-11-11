@@ -16,6 +16,8 @@ dependencies:
       - ipdb
       - pretrainedmodels
       - lpips
+      - tensorflow
+      - wandb
   - scipy
   - numpy
   - matplotlib

@@ -16,7 +16,7 @@ class RDataset(torch.utils.data.Dataset):
     """
 
     def __init__(
-            self, path, stage="train", image_size=(128, 128), world_scale=1.0,
+            self, path, stage="train", image_size=(120, 160), world_scale=1.0,
     ):
         """
         :param stage train | val | test
@@ -84,21 +84,23 @@ class RDataset(torch.utils.data.Dataset):
             if mask_path is not None:
                 with tf.io.gfile.GFile(mask_path, 'rb') as f:
                     mask = pickle.load(f)
+                    
                     if len(mask.shape) == 2:
                         mask = mask[..., None]
                     mask = mask[..., :1]
             else:
                 mask = (img != 255).all(axis=-1)[..., None].astype(np.uint8) * 255
-
+            
+            mask = mask.astype(np.float32)
             mask_tensor = self.mask_to_tensor(mask)
-
+            #print(mask_tensor.max(), mask_tensor.min(), 'mask tensor data in dataset ravens', rgb_path, mask_path)
             pose = torch.from_numpy(
                 np.loadtxt(pose_path, dtype=np.float32).reshape(4, 4)
             )
             pose = pose @ self._coord_trans
 
-            rows = np.any(mask, axis=1)
-            cols = np.any(mask, axis=0)
+            rows = np.any(mask, axis=1) #width
+            cols = np.any(mask, axis=0) #height 
             rnz = np.where(rows)[0]
             cnz = np.where(cols)[0]
             if len(rnz) == 0:
@@ -108,6 +110,7 @@ class RDataset(torch.utils.data.Dataset):
             rmin, rmax = rnz[[0, -1]]
             cmin, cmax = cnz[[0, -1]]
             bbox = torch.tensor([cmin, rmin, cmax, rmax], dtype=torch.float32)
+            #print(bbox, rgb_path)
 
             all_imgs.append(img_tensor)
             all_masks.append(mask_tensor)
@@ -118,7 +121,7 @@ class RDataset(torch.utils.data.Dataset):
         all_poses = torch.stack(all_poses)
         all_masks = torch.stack(all_masks)
         all_bboxes = torch.stack(all_bboxes)
-
+        #print(self.image_size, all_imgs.shape, 'image desired and actual shapes')
         if all_imgs.shape[-2:] != self.image_size:
             scale = self.image_size[0] / all_imgs.shape[-2]
             focal *= scale
@@ -128,7 +131,7 @@ class RDataset(torch.utils.data.Dataset):
 
             all_imgs = F.interpolate(all_imgs, size=self.image_size, mode="area")
             all_masks = F.interpolate(all_masks, size=self.image_size, mode="area")
-
+        #print(all_bboxes.max(), all_bboxes.min(), 'min and max of bboxes after')
         if self.world_scale != 1.0:
             focal *= self.world_scale
             all_poses[:, :3, 3] *= self.world_scale

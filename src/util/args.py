@@ -20,6 +20,7 @@ def parse_args(
 ):
     parser = argparse.ArgumentParser()
     parser.add_argument("--conf", "-c", type=str, default=None)
+    parser.add_argument("--wandb_name", type=str, default=None)
     parser.add_argument("--resume", "-r", action="store_true", help="continue training")
     parser.add_argument(
         "--gpu_id", type=str, default="0", help="GPU(s) to use, space delimited"

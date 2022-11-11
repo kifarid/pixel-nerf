@@ -41,7 +41,9 @@ class Trainer:
         self.summary_path = os.path.join(args.logs_path, args.name)
         self.writer = SummaryWriter(self.summary_path)
 
-        self.wandb = conf.get_bool("wandb")
+        #self.wandb = conf.get_bool("wandb")
+        self.wandb_name = args.wandb_name
+        print(f' wandb name is {self.wandb_name}')
 
         self.fixed_test = hasattr(args, "fixed_test") and args.fixed_test
 
@@ -107,14 +109,18 @@ class Trainer:
         self.visual_path = os.path.join(self.args.visual_path, self.args.name)
         self.conf = conf
 
-        if self.wandb:
+        if self.wandb_name is not None:
             os.environ["WANDB_API_KEY"] = 'cff06ca1fa10f98d7fde3bf619ee5ec8550aba11'
-            wandb.init(entity=conf.get_string('wandb_entity', 'kifarid'),
-                       project=conf.get_string('wandb_project', 'Nerf_for_control'),
-                       dir=self.summary_path,
-                       config=self.conf)
-
             wandb.tensorboard.patch(root_logdir=str(self.summary_path))
+            wandb.init(
+                    name=self.wandb_name,
+                    entity=conf.get_string('wandb_entity', 'kifarid'),
+                    project=conf.get_string('wandb_project', 'Nerf_for_control'),
+                    dir=self.summary_path,
+                    sync_tensorboard=True,
+                    config=self.conf)
+
+            #wandb.tensorboard.patch(root_logdir=str(self.summary_path))
 
     def post_batch(self, epoch, batch):
         """
@@ -240,6 +246,7 @@ class Trainer:
                             #     ),
                             #     vis_u8,
                             # )
+                            vis_u8 = np.moveaxis(vis_u8, -1, 0)
                             self.writer.add_image(
                                 "vis_img", vis_u8, global_step=step_id
                             )
