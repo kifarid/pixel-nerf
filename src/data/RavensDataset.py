@@ -16,16 +16,18 @@ class RDataset(torch.utils.data.Dataset):
     """
 
     def __init__(
-            self, path, stage="train", image_size=(120, 160), world_scale=1.0,
+            self, path, stage="train", image_size=(120, 160), world_scale=1.0, views_per_scene=3
     ):
         """
         :param stage train | val | test
         :param image_size result image size (resizes if different)
         :param world_scale amount to scale entire world by
+        :param number of views to consider per scene
         """
         super().__init__()
         self.base_path = path + "_" + stage
         self.dataset_name = os.path.basename(path)
+        self.views_per_scene = views_per_scene
 
         print("Loading SRN dataset", self.base_path, "name:", self.dataset_name)
         self.stage = stage
@@ -60,9 +62,9 @@ class RDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         intrin_path = self.intrins[index]
         dir_path = os.path.dirname(intrin_path)
-        rgb_paths = sorted(glob.glob(os.path.join(dir_path, "rgb", "*")))
-        mask_paths = sorted(glob.glob(os.path.join(dir_path, "segm", "*")))
-        pose_paths = sorted(glob.glob(os.path.join(dir_path, "pose", "*")))
+        rgb_paths = sorted(glob.glob(os.path.join(dir_path, "rgb", "*")))[:self.views_per_scene]
+        mask_paths = sorted(glob.glob(os.path.join(dir_path, "segm", "*")))[:self.views_per_scene]
+        pose_paths = sorted(glob.glob(os.path.join(dir_path, "pose", "*")))[:self.views_per_scene]
 
         if len(mask_paths) == 0:
             mask_paths = [None] * len(rgb_paths)

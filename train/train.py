@@ -31,6 +31,13 @@ def extra_args(parser):
         default="1",
         help="Number of source views (multiview); put multiple (space delim) to pick randomly per batch ('NV')",
     )
+
+    parser.add_argument(
+        "--views_per_scene",
+        type=int,
+        default=3,
+        help="Number of views to consider per 1 scene",
+    )
     parser.add_argument(
         "--freeze_enc",
         action="store_true",
@@ -56,7 +63,7 @@ def extra_args(parser):
 args, conf = util.args.parse_args(extra_args, training=True, default_ray_batch_size=128)
 device = util.get_cuda(args.gpu_id[0])
 
-dset, val_dset, _ = get_split_dataset(args.dataset_format, args.datadir)
+dset, val_dset, _ = get_split_dataset(args.dataset_format, args.datadir, views_per_scene=args.views_per_scene)
 print(
     "dset z_near {}, z_far {}, lindisp {}".format(dset.z_near, dset.z_far, dset.lindisp)
 )
