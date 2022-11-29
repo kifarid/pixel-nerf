@@ -8,6 +8,7 @@ from .model_util import make_encoder, make_mlp
 import torch.autograd.profiler as profiler
 from util import repeat_interleave
 import os
+import numpy as np
 import os.path as osp
 import warnings
 
@@ -200,10 +201,13 @@ class PixelNeRFNet(torch.nn.Module):
                     z_feature = self.code(z_feature)
 
                 mlp_input = z_feature
-
+            #print('point stats in camera coord:', xyz.reshape(-1, 3).max(dim=0).values, xyz.reshape(-1, 3).min(dim=0).values, xyz.reshape(-1, 3).mean(dim=0).values,  '\n')
             if self.use_encoder:
                 # Grab encoder's latent code.
-                uv = -xyz[:, :, :2] / xyz[:, :, 2:]  # (SB, B, 2)
+                divisor = xyz[:, :, 2:]
+                divisor = torch.where(torch.abs(divisor)>1e-4, divisor, torch.full(divisor.size(),1e-4).to(divisor))
+                uv = -xyz[:, :, :2] / divisor  # (SB, B, 2)
+
                 uv *= repeat_interleave(
                     self.focal.unsqueeze(1), NS if self.focal.shape[0] > 1 else 1
                 )

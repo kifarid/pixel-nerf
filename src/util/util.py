@@ -237,7 +237,7 @@ def bbox_sample(bboxes, num_pix):
     return pix
 
 
-def gen_rays(poses, width, height, focal, z_near, z_far, c=None, ndc=False):
+def gen_rays(poses, width, height, focal, z_near, z_far, c=None, ndc=False, bound_floor=False):
     """
     Generate camera rays
     :return (B, H, W, 8)
@@ -262,7 +262,7 @@ def gen_rays(poses, width, height, focal, z_near, z_far, c=None, ndc=False):
         cam_centers, cam_raydir = ndc_rays(
             width, height, focal, 1.0, cam_centers, cam_raydir
         )
-
+    
     cam_nears = (
         torch.tensor(z_near, device=device)
         .view(1, 1, 1, 1)
@@ -273,6 +273,9 @@ def gen_rays(poses, width, height, focal, z_near, z_far, c=None, ndc=False):
         .view(1, 1, 1, 1)
         .expand(num_images, height, width, -1)
     )
+    if bound_floor:
+        z_far_test = (-1*cam_centers[...,-1]/cam_raydir[...,-1])[..., None]
+        cam_fars = torch.where(z_far_test<cam_fars, z_far_test, cam_fars)
     return torch.cat(
         (cam_centers, cam_raydir, cam_nears, cam_fars), dim=-1
     )  # (B, H, W, 8)

@@ -21,6 +21,14 @@ from dotmap import DotMap
 
 
 def extra_args(parser):
+
+    parser.add_argument(
+        "--bound_floor", action="store_true",
+        default=None,
+        help="whether to limit sampling below world's z"
+    )
+
+
     parser.add_argument(
         "--batch_size", "-B", type=int, default=4, help="Object batch size ('SB')"
     )
@@ -35,7 +43,7 @@ def extra_args(parser):
     parser.add_argument(
         "--views_per_scene",
         type=int,
-        default=3,
+        default=12,
         help="Number of views to consider per 1 scene",
     )
     parser.add_argument(
@@ -112,7 +120,9 @@ class PixelNeRFTrainer(trainlib.Trainer):
 
         self.z_near = dset.z_near
         self.z_far = dset.z_far
-
+        self.bound_floor = args.bound_floor
+        if self.bound_floor:
+            print("bound_floor activated")
         self.use_bbox = args.no_bbox_step > 0
 
     def post_batch(self, epoch, batch):
@@ -125,7 +135,7 @@ class PixelNeRFTrainer(trainlib.Trainer):
         if "images" not in data:
             return {}
         all_images = data["images"].to(device=device)  # (SB, NV, 3, H, W)
-
+        
         SB, NV, _, H, W = all_images.shape
         all_poses = data["poses"].to(device=device)  # (SB, NV, 4, 4)
         all_bboxes = data.get("bbox")  # (SB, NV, 4)  cmin rmin cmax rmax
@@ -164,7 +174,7 @@ class PixelNeRFTrainer(trainlib.Trainer):
             images_0to1 = images * 0.5 + 0.5
 
             cam_rays = util.gen_rays(
-                poses, W, H, focal, self.z_near, self.z_far, c=c
+                poses, W, H, focal, self.z_near, self.z_far, c=c, bound_floor=self.bound_floor
             )  # (NV, H, W, 8)
             rgb_gt_all = images_0to1
             rgb_gt_all = (
@@ -195,7 +205,7 @@ class PixelNeRFTrainer(trainlib.Trainer):
         src_poses = util.batched_index_select_nd(all_poses, image_ord)  # (SB, NS, 4, 4)
 
         all_bboxes = all_poses = all_images = None
-
+       
         net.encode(
             src_images,
             src_poses,
@@ -346,6 +356,6 @@ class PixelNeRFTrainer(trainlib.Trainer):
         renderer.train()
         return vis, vals
 
-
+torch.autograd.set_detect_anomaly(True)
 trainer = PixelNeRFTrainer()
 trainer.start()

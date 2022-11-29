@@ -174,6 +174,7 @@ class NeRFRenderer(torch.nn.Module):
         """
         with profiler.record_function("renderer_composite"):
             B, K = z_samp.shape
+            #print('z samp in nerf renderer:', z_samp.min(dim=0).values, z_samp.min(dim=0).values, '\n')
 
             deltas = z_samp[:, 1:] - z_samp[:, :-1]  # (B, K-1)
             #  if far:
@@ -184,6 +185,9 @@ class NeRFRenderer(torch.nn.Module):
             # (B, K, 3)
             points = rays[:, None, :3] + z_samp.unsqueeze(2) * rays[:, None, 3:6]
             points = points.reshape(-1, 3)  # (B*K, 3)
+            if torch.isnan(points).any() or torch.isinf(points).any():
+                print('problem is only in original points have nan values before model')
+                    
 
             use_viewdirs = hasattr(model, "use_viewdirs") and model.use_viewdirs
 
@@ -210,6 +214,19 @@ class NeRFRenderer(torch.nn.Module):
                     viewdirs, eval_batch_size, dim=eval_batch_dim
                 )
                 for pnts, dirs in zip(split_points, split_viewdirs):
+                    if torch.isnan(pnts).any() or torch.isinf(pnts).any():
+                        print('problem is only in pnts have nan values before model')
+                    for latent in model.encoder.latents:
+                        if torch.isnan(latent).any() or torch.isinf(latent).any():
+                            print('latents have nan values before model')
+
+                    model_o = model(pnts, coarse=coarse, viewdirs=dirs)
+                    if torch.isnan(model_o).any() or torch.isinf(model_o).any():
+                        print('model_o has nan values')
+
+                    for latent in model.encoder.latents:
+                        if torch.isnan(latent).any() or torch.isinf(latent).any():
+                            print('latents have nan values')
                     val_all.append(model(pnts, coarse=coarse, viewdirs=dirs))
             else:
                 for pnts in split_points:
