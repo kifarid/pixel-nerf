@@ -1,0 +1,59 @@
+# Main multiview supported config
+model:
+  # MLP architecture
+  # Adapted for multiview
+  # Possibly too big
+  use_encoder: true
+  freeze_enc: false
+  use_global_encoder: false
+  use_xyz: true
+  canon_xyz: false
+  use_code: true
+  code: 
+    num_freqs: 6
+    freq_factor: 1.5
+    include_input: true
+  use_viewdirs: true
+  use_code_viewdirs: false
+  mlp_coarse: 
+    type: resnet
+    n_blocks: 5
+    d_hidden: 512
+    # Combine after 3rd layer by average
+    combine_layer: 3
+    combine_type: average
+  mlp_fine: 
+    type: resnet
+    n_blocks: 5
+    d_hidden: 512
+    combine_layer: 3
+    combine_type: average
+  encoder: 
+    backbone: resnet34
+    pretrained: true
+    num_layers: 4
+renderer: 
+  n_coarse: 64
+  n_fine: 32
+  n_fine_depth: 16
+  depth_std: 0.01
+  sched: []
+  white_bkgd: true
+loss: 
+  rgb: 
+    use_l1: false
+  rgb_fine: 
+    use_l1: false
+  alpha: 
+    lambda_alpha: 0.0
+    clamp_alpha: 100
+    init_epoch: 5
+  lambda_coarse: 1.0
+  lambda_fine: 1.0
+train: 
+  print_interval: 2
+  save_interval: 50
+  vis_interval: 100
+  eval_interval: 50
+  accu_grad: 1
+  num_epoch_repeats: 1

@@ -1,0 +1,9 @@
+data:
+  format: ravens
+renderer: 
+  white_bkgd: false
+  no_bbox_step: 0
+train: 
+  wandb: true
+  project: Nerf_for_control
+  entity: kifarid

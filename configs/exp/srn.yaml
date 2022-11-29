@@ -1,0 +1,3 @@
+# SRN experiments config
+data:
+  format: srn
