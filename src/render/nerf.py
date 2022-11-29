@@ -53,10 +53,6 @@ class NeRFRenderer(torch.nn.Module):
     :param eval_batch_size ray batch size for evaluation
     :param white_bkgd if true, background color is white; else black
     :param lindisp if to use samples linear in disparity instead of distance
-    :param sched ray sampling schedule. list containing 3 lists of equal length.
-    sched[0] is list of iteration numbers,
-    sched[1] is list of coarse sample numbers,
-    sched[2] is list of fine sample numbers
     """
 
     def __init__(
@@ -69,7 +65,6 @@ class NeRFRenderer(torch.nn.Module):
         eval_batch_size=100000,
         white_bkgd=False,
         lindisp=False,
-        sched=None,  # ray sampling schedule for coarse and fine rays
     ):
         super().__init__()
         self.n_coarse = n_coarse
@@ -85,14 +80,8 @@ class NeRFRenderer(torch.nn.Module):
         if lindisp:
             print("Using linear displacement rays")
         self.using_fine = n_fine > 0
-        self.sched = sched
-        if sched is not None and len(sched) == 0:
-            self.sched = None
         self.register_buffer(
             "iter_idx", torch.tensor(0, dtype=torch.long), persistent=True
-        )
-        self.register_buffer(
-            "last_sched", torch.tensor(0, dtype=torch.long), persistent=True
         )
 
     def sample_coarse(self, rays):
@@ -279,9 +268,6 @@ class NeRFRenderer(torch.nn.Module):
         :return render dict
         """
         with profiler.record_function("renderer_forward"):
-            if self.sched is not None and self.last_sched.item() > 0:
-                self.n_coarse = self.sched[1][self.last_sched.item() - 1]
-                self.n_fine = self.sched[2][self.last_sched.item() - 1]
 
             assert len(rays.shape) == 3
             superbatch_size = rays.shape[0]
@@ -332,40 +318,18 @@ class NeRFRenderer(torch.nn.Module):
             ret_dict.weights = weights
         return ret_dict
 
-    def sched_step(self, steps=1):
-        """
-        Called each training iteration to update sample numbers
-        according to schedule
-        """
-        if self.sched is None:
-            return
-        self.iter_idx += steps
-        while (
-            self.last_sched.item() < len(self.sched[0])
-            and self.iter_idx.item() >= self.sched[0][self.last_sched.item()]
-        ):
-            self.n_coarse = self.sched[1][self.last_sched.item()]
-            self.n_fine = self.sched[2][self.last_sched.item()]
-            print(
-                "INFO: NeRF sampling resolution changed on schedule ==> c",
-                self.n_coarse,
-                "f",
-                self.n_fine,
-            )
-            self.last_sched += 1
 
     @classmethod
     def from_conf(cls, conf, white_bkgd=False, lindisp=False, eval_batch_size=100000):
         return cls(
-            conf.get_int("n_coarse", 128),
-            conf.get_int("n_fine", 0),
-            n_fine_depth=conf.get_int("n_fine_depth", 0),
-            noise_std=conf.get_float("noise_std", 0.0),
-            depth_std=conf.get_float("depth_std", 0.01),
-            white_bkgd=conf.get_float("white_bkgd", white_bkgd),
+            conf.get("n_coarse", 128),
+            conf.get("n_fine", 0),
+            n_fine_depth=conf.get("n_fine_depth", 0),
+            noise_std=conf.get("noise_std", 0.0),
+            depth_std=conf.get("depth_std", 0.01),
+            white_bkgd=conf.get("white_bkgd", white_bkgd),
             lindisp=lindisp,
-            eval_batch_size=conf.get_int("eval_batch_size", eval_batch_size),
-            sched=conf.get_list("sched", None),
+            eval_batch_size=conf.get("eval_batch_size", eval_batch_size),
         )
 
     def bind_parallel(self, net, gpus=None, simple_output=False):

@@ -38,10 +38,10 @@ class AlphaLossNV2(torch.nn.Module):
 
 
 def get_alpha_loss(conf):
-    lambda_alpha = conf.get_float("lambda_alpha")
-    clamp_alpha = conf.get_float("clamp_alpha")
-    init_epoch = conf.get_int("init_epoch")
-    force_opaque = conf.get_bool("force_opaque", False)
+    lambda_alpha = conf.get("lambda_alpha")
+    clamp_alpha = conf.get("clamp_alpha")
+    init_epoch = conf.get("init_epoch")
+    force_opaque = conf.get("force_opaque", False)
 
     return AlphaLossNV2(
         lambda_alpha, clamp_alpha, init_epoch, force_opaque=force_opaque
@@ -55,7 +55,7 @@ class RGBWithUncertainty(torch.nn.Module):
         super().__init__()
         self.element_loss = (
             torch.nn.L1Loss(reduction="none")
-            if conf.get_bool("use_l1")
+            if conf.get("use_l1")
             else torch.nn.MSELoss(reduction="none")
         )
 
@@ -89,7 +89,7 @@ class RGBWithBackground(torch.nn.Module):
 
 
 def get_rgb_loss(conf, coarse=True, using_bg=False, reduction="mean"):
-    if conf.get_bool("use_uncertainty", False) and not coarse:
+    if conf.get("use_uncertainty", False) and not coarse:
         print("using loss with uncertainty")
         return RGBWithUncertainty(conf)
     #     if using_bg:
@@ -98,6 +98,6 @@ def get_rgb_loss(conf, coarse=True, using_bg=False, reduction="mean"):
     print("using vanilla rgb loss")
     return (
         torch.nn.L1Loss(reduction=reduction)
-        if conf.get_bool("use_l1")
+        if conf.get("use_l1")
         else torch.nn.MSELoss(reduction=reduction)
     )

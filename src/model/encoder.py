@@ -166,14 +166,14 @@ class SpatialEncoder(nn.Module):
     @classmethod
     def from_conf(cls, conf):
         return cls(
-            conf.get_string("backbone"),
-            pretrained=conf.get_bool("pretrained", True),
-            num_layers=conf.get_int("num_layers", 4),
-            index_interp=conf.get_string("index_interp", "bilinear"),
-            index_padding=conf.get_string("index_padding", "border"),
-            upsample_interp=conf.get_string("upsample_interp", "bilinear"),
-            feature_scale=conf.get_float("feature_scale", 1.0),
-            use_first_pool=conf.get_bool("use_first_pool", True),
+            conf.get("backbone"),
+            pretrained=conf.get("pretrained", True),
+            num_layers=conf.get("num_layers", 4),
+            index_interp=conf.get("index_interp", "bilinear"),
+            index_padding=conf.get("index_padding", "border"),
+            upsample_interp=conf.get("upsample_interp", "bilinear"),
+            feature_scale=conf.get("feature_scale", 1.0),
+            use_first_pool=conf.get("use_first_pool", True),
         )
 
 
@@ -236,6 +236,6 @@ class ImageEncoder(nn.Module):
     def from_conf(cls, conf):
         return cls(
             conf.get_string("backbone"),
-            pretrained=conf.get_bool("pretrained", True),
-            latent_size=conf.get_int("latent_size", 128),
+            pretrained=conf.get("pretrained", True),
+            latent_size=conf.get("latent_size", 128),
         )

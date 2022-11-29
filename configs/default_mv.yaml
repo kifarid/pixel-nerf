@@ -3,6 +3,7 @@ model:
   # MLP architecture
   # Adapted for multiview
   # Possibly too big
+  gamma: 1.0
   use_encoder: true
   freeze_enc: false
   use_global_encoder: false
@@ -28,6 +29,7 @@ model:
     d_hidden: 512
     combine_layer: 3
     combine_type: average
+  nviews: 1
   encoder: 
     backbone: resnet34
     pretrained: true
@@ -37,7 +39,6 @@ renderer:
   n_fine: 32
   n_fine_depth: 16
   depth_std: 0.01
-  sched: []
   white_bkgd: true
 loss: 
   rgb: 
@@ -50,7 +51,9 @@ loss:
     init_epoch: 5
   lambda_coarse: 1.0
   lambda_fine: 1.0
-train: 
+train:
+  lr: 1e-4
+  batch_size: 4
   print_interval: 2
   save_interval: 50
   vis_interval: 100

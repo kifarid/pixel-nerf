@@ -20,9 +20,9 @@ class PixelNeRFNet(torch.nn.Module):
         """
         super().__init__()
         self.encoder = make_encoder(conf["encoder"])
-        self.use_encoder = conf.get_bool("use_encoder", True)  # Image features?
+        self.use_encoder = conf.get("use_encoder", True)  # Image features?
 
-        self.use_xyz = conf.get_bool("use_xyz", False)
+        self.use_xyz = conf.get("use_xyz", False)
 
         assert self.use_encoder or self.use_xyz  # Must use some feature..
 
@@ -30,21 +30,21 @@ class PixelNeRFNet(torch.nn.Module):
         # So that all objects, regardless of camera distance to center, will
         # be centered at z=0.
         # Only makes sense in ShapeNet-type setting.
-        self.normalize_z = conf.get_bool("normalize_z", True)
+        self.normalize_z = conf.get("normalize_z", True)
 
         self.stop_encoder_grad = (
             stop_encoder_grad  # Stop ConvNet gradient (freeze weights)
         )
-        self.use_code = conf.get_bool("use_code", False)  # Positional encoding
-        self.use_code_viewdirs = conf.get_bool(
+        self.use_code = conf.get("use_code", False)  # Positional encoding
+        self.use_code_viewdirs = conf.get(
             "use_code_viewdirs", True
         )  # Positional encoding applies to viewdirs
 
         # Enable view directions
-        self.use_viewdirs = conf.get_bool("use_viewdirs", False)
+        self.use_viewdirs = conf.get("use_viewdirs", False)
 
         # Global image features?
-        self.use_global_encoder = conf.get_bool("use_global_encoder", False)
+        self.use_global_encoder = conf.get("use_global_encoder", False)
 
         d_latent = self.encoder.latent_size if self.use_encoder else 0
         d_in = 3 if self.use_xyz else 1

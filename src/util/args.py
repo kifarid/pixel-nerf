@@ -1,22 +1,21 @@
-import sys
+import argparse
 import os
 
-
-import argparse
-from pyhocon import ConfigFactory
+# from pyhocon import ConfigFactory
+from omegaconf import OmegaConf
 
 
 def parse_args(
-    callback=None,
-    training=False,
-    default_conf="conf/default_mv.conf",
-    default_expname="example",
-    default_data_format="dvr",
-    default_num_epochs=10000000,
-    default_lr=1e-4,
-    default_gamma=1.00,
-    default_datadir="data",
-    default_ray_batch_size=50000,
+        callback=None,
+        training=False,
+        default_conf="configs/default_mv.yaml",
+        default_expname="example",
+        default_data_format="dvr",
+        default_num_epochs=10000000,
+        default_lr=1e-4,
+        default_gamma=1.00,
+        default_datadir="data",
+        default_ray_batch_size=50000,
 ):
     parser = argparse.ArgumentParser()
     parser.add_argument("--conf", "-c", type=str, default=None)
@@ -51,12 +50,7 @@ def parse_args(
         default="checkpoints",
         help="checkpoints output directory",
     )
-    parser.add_argument(
-        "--visual_path",
-        type=str,
-        default="visuals",
-        help="visualization output directory",
-    )
+
     parser.add_argument(
         "--epochs",
         type=int,
@@ -75,32 +69,36 @@ def parse_args(
     )
     if callback is not None:
         parser = callback(parser)
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
 
     if args.exp_group_name is not None:
         args.logs_path = os.path.join(args.logs_path, args.exp_group_name)
         args.checkpoints_path = os.path.join(args.checkpoints_path, args.exp_group_name)
-        args.visual_path = os.path.join(args.visual_path, args.exp_group_name)
 
     os.makedirs(os.path.join(args.checkpoints_path, args.name), exist_ok=True)
-    os.makedirs(os.path.join(args.visual_path, args.name), exist_ok=True)
 
     PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    EXPCONF_PATH = os.path.join(PROJECT_ROOT, "expconf.conf")
-    expconf = ConfigFactory.parse_file(EXPCONF_PATH)
+
+    EXPCONF_PATH = os.path.join(PROJECT_ROOT, 'configs', "expconf.yaml")
+    expconf = OmegaConf.load(EXPCONF_PATH)
+
+    DFLT_PATH = os.path.join(PROJECT_ROOT, 'configs', default_conf)
+    defaultconf = OmegaConf.load(DFLT_PATH)
 
     if args.conf is None:
-        args.conf = expconf.get_string("config." + args.name, default_conf)
+        args.conf = expconf["config"].get(args.name, default_conf)
 
     if args.conf is None:
-        args.conf = expconf.get_string("config." + args.name, default_conf)
+        args.conf = expconf["config"].get(args.name, default_conf)
     if args.datadir is None:
-        args.datadir = expconf.get_string("datadir." + args.name, default_datadir)
+        args.datadir = expconf["datadir"].get(args.name, default_datadir)
 
-    conf = ConfigFactory.parse_file(args.conf)
+    conf = OmegaConf.load(args.conf)
+    cli = OmegaConf.from_dotlist(unknown)
+    conf = OmegaConf.merge([defaultconf, conf, cli])
 
     if args.dataset_format is None:
-        args.dataset_format = conf.get_string("data.format", default_data_format)
+        args.dataset_format = conf.get("data.format", default_data_format)
 
     args.gpu_id = list(map(int, args.gpu_id.split()))
 

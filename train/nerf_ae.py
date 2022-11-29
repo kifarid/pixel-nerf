@@ -72,8 +72,8 @@ class NeRFAE(pl.LightningModule):
             print("Encoder frozen")
             self.net.encoder.eval()
 
-        self.lambda_coarse = conf.get_float("loss.lambda_coarse")
-        self.lambda_fine = conf.get_float("loss.lambda_fine", 1.0)
+        self.lambda_coarse = conf["loss"].get("lambda_coarse")
+        self.lambda_fine = conf["loss"].get("lambda_fine", 1.0)
         self.no_bbox_step = conf.conf["renderer"].no_bbox_step
         self.use_bbox = self.no_bbox_step > 0
         # self.learning_rate = conf["model"].learning
@@ -97,8 +97,8 @@ class NeRFAE(pl.LightningModule):
 
     def loss_from_config(self, lossconfig):
 
-        self.lambda_coarse = lossconfig.get_float("lambda_coarse")
-        self.lambda_fine = lossconfig.get_float("lambda_fine", 1.0)
+        self.lambda_coarse = lossconfig.get("lambda_coarse")
+        self.lambda_fine = lossconfig.get("lambda_fine", 1.0)
         print(
             "lambda coarse {} and fine {}".format(self.lambda_coarse, self.lambda_fine)
         )

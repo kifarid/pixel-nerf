@@ -188,11 +188,11 @@ class ResnetFC(nn.Module):
         # PyHocon construction
         return cls(
             d_in,
-            n_blocks=conf.get_int("n_blocks", 5),
-            d_hidden=conf.get_int("d_hidden", 128),
-            beta=conf.get_float("beta", 0.0),
-            combine_layer=conf.get_int("combine_layer", 1000),
-            combine_type=conf.get_string("combine_type", "average"),  # average | max
-            use_spade=conf.get_bool("use_spade", False),
+            n_blocks=conf.get("n_blocks", 5),
+            d_hidden=conf.get("d_hidden", 128),
+            beta=conf.get("beta", 0.0),
+            combine_layer=conf.get("combine_layer", 1000),
+            combine_type=conf.get("combine_type", "average"),  # average | max
+            use_spade=conf.get("use_spade", False),
             **kwargs
         )

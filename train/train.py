@@ -100,12 +100,12 @@ class PixelNeRFTrainer(trainlib.Trainer):
             self.args.name,
         )
 
-        self.lambda_coarse = conf.get_float("loss.lambda_coarse")
-        self.lambda_fine = conf.get_float("loss.lambda_fine", 1.0)
+        self.lambda_coarse = conf["loss"].get("lambda_coarse", 1.0)
+        self.lambda_fine = conf["loss"].get("lambda_fine", 1.0)
         print(
             "lambda coarse {} and fine {}".format(self.lambda_coarse, self.lambda_fine)
         )
-        self.rgb_coarse_crit = loss.get_rgb_loss(conf["loss.rgb"], True)
+        self.rgb_coarse_crit = loss.get_rgb_loss(conf.loss["rgb"], True)
         fine_loss_conf = conf["loss.rgb"]
         if "rgb_fine" in conf["loss"]:
             print("using fine loss")

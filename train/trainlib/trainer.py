@@ -31,13 +31,13 @@ class Trainer:
 
         self.num_total_batches = len(self.train_dataset)
         self.exp_name = args.name
-        self.save_interval = conf.get_int("save_interval")
-        self.print_interval = conf.get_int("print_interval")
-        self.vis_interval = conf.get_int("vis_interval")
-        self.eval_interval = conf.get_int("eval_interval")
-        self.num_epoch_repeats = conf.get_int("num_epoch_repeats", 1)
+        self.save_interval = conf.get("save_interval")
+        self.print_interval = conf.get("print_interval")
+        self.vis_interval = conf.get("vis_interval")
+        self.eval_interval = conf.get("eval_interval")
+        self.num_epoch_repeats = conf.get("num_epoch_repeats", 1)
         self.num_epochs = args.epochs
-        self.accu_grad = conf.get_int("accu_grad", 1)
+        self.accu_grad = conf.get("accu_grad", 1)
         self.summary_path = os.path.join(args.logs_path, args.name)
         self.writer = SummaryWriter(self.summary_path)
 
@@ -114,8 +114,8 @@ class Trainer:
             wandb.tensorboard.patch(root_logdir=str(self.summary_path))
             wandb.init(
                     name=self.wandb_name,
-                    entity=conf.get_string('wandb_entity', 'kifarid'),
-                    project=conf.get_string('wandb_project', 'Nerf_for_control'),
+                    entity=conf.get('wandb_entity', 'kifarid'),
+                    project=conf.get('wandb_project', 'Nerf_for_control'),
                     dir=self.summary_path,
                     sync_tensorboard=True,
                     config=self.conf)

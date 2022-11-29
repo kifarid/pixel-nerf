@@ -1,8 +1,9 @@
-config: 
-  sn64: conf/exp/sn64.conf
-  sn64_unseen: conf/exp/sn64_unseen.conf
-  srn_chair: conf/exp/srn.conf
-  srn_car: conf/exp/srn.conf
-  dtu: conf/exp/dtu.conf
-  multi_obj: conf/exp/multi_obj.conf
+config:
+  sn64: configs/exp/sn64.yaml
+  sn64_unseen: configs/exp/sn64_unseen.yaml
+  srn_chair: configs/exp/srn.yaml
+  srn_car: configs/exp/srn.yaml
+  dtu: configs/exp/dtu.yaml
+  multi_obj: configs/exp/multi_obj.yaml
+  ravens: configs/exp/ravens.yaml
 datadir: 

@@ -1,8 +1,10 @@
 data:
   format: ravens
+  views_per_scene: 3
 renderer: 
   white_bkgd: false
   no_bbox_step: 0
+  gpus:
 train: 
   wandb: true
   project: Nerf_for_control
