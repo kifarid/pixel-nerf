@@ -67,6 +67,13 @@ def parse_args(
     parser.add_argument(
         "--ray_batch_size", "-R", type=int, default=default_ray_batch_size, help="Ray batch size"
     )
+
+    parser.add_argument(
+        "--bound_floor", action="store_true",
+        default=None,
+        help="whether to limit sampling below world's z"
+    )
+
     if callback is not None:
         parser = callback(parser)
     args, unknown = parser.parse_known_args()

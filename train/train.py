@@ -23,13 +23,6 @@ from dotmap import DotMap
 def extra_args(parser):
 
     parser.add_argument(
-        "--bound_floor", action="store_true",
-        default=None,
-        help="whether to limit sampling below world's z"
-    )
-
-
-    parser.add_argument(
         "--batch_size", "-B", type=int, default=4, help="Object batch size ('SB')"
     )
     parser.add_argument(
