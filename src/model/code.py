@@ -45,8 +45,8 @@ class PositionalEncoding(torch.nn.Module):
     def from_conf(cls, conf, d_in=3):
         # PyHocon construction
         return cls(
-            conf.get_int("num_freqs", 6),
+            conf.get("num_freqs", 6),
             d_in,
-            conf.get_float("freq_factor", np.pi),
-            conf.get_bool("include_input", True),
+            conf.get("freq_factor", np.pi),
+            conf.get("include_input", True),
         )

@@ -106,7 +106,7 @@ class Trainer:
                     torch.load(self.default_net_state_path, map_location=device)
                 )
 
-        self.visual_path = os.path.join(self.args.visual_path, self.args.name)
+        #self.visual_path = os.path.join(self.args.visual_path, self.args.name)
         self.conf = conf
 
         if self.wandb_name is not None:

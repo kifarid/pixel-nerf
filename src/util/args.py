@@ -8,7 +8,7 @@ from omegaconf import OmegaConf
 def parse_args(
         callback=None,
         training=False,
-        default_conf="configs/default_mv.yaml",
+        default_conf="default_mv.yaml",
         default_expname="example",
         default_data_format="dvr",
         default_num_epochs=10000000,
@@ -70,13 +70,13 @@ def parse_args(
 
     parser.add_argument(
         "--bound_floor", action="store_true",
-        default=None,
         help="whether to limit sampling below world's z"
     )
 
     if callback is not None:
         parser = callback(parser)
     args, unknown = parser.parse_known_args()
+    print(f"args are {args}")
 
     if args.exp_group_name is not None:
         args.logs_path = os.path.join(args.logs_path, args.exp_group_name)
@@ -85,7 +85,7 @@ def parse_args(
     os.makedirs(os.path.join(args.checkpoints_path, args.name), exist_ok=True)
 
     PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-
+    print(f'project root is {PROJECT_ROOT}')
     EXPCONF_PATH = os.path.join(PROJECT_ROOT, 'configs', "expconf.yaml")
     expconf = OmegaConf.load(EXPCONF_PATH)
 
@@ -97,15 +97,16 @@ def parse_args(
 
     if args.conf is None:
         args.conf = expconf["config"].get(args.name, default_conf)
-    if args.datadir is None:
-        args.datadir = expconf["datadir"].get(args.name, default_datadir)
+    #if args.datadir is None:
+    #    args.datadir = expconf["datadir"].get(args.name, default_datadir)
 
     conf = OmegaConf.load(args.conf)
     cli = OmegaConf.from_dotlist(unknown)
-    conf = OmegaConf.merge([defaultconf, conf, cli])
-
+    conf = OmegaConf.merge(defaultconf, conf, cli)
+    print(f'printing renderer configurations: {conf.renderer}')
+    print(f'printing configurations: {conf}')
     if args.dataset_format is None:
-        args.dataset_format = conf.get("data.format", default_data_format)
+        args.dataset_format = conf["data"].get("format", default_data_format)
 
     args.gpu_id = list(map(int, args.gpu_id.split()))
 
