@@ -5,11 +5,13 @@ https://github.com/bmild/nerf
 https://github.com/kwea123/nerf_pl
 """
 import torch
+import numpy as np
 import torch.nn.functional as F
 import util
 import torch.autograd.profiler as profiler
 from torch.nn import DataParallel
 from dotmap import DotMap
+import datetime
 
 
 class _RenderWrapper(torch.nn.Module):
@@ -176,7 +178,13 @@ class NeRFRenderer(torch.nn.Module):
             points = points.reshape(-1, 3)  # (B*K, 3)
             if torch.isnan(points).any() or torch.isinf(points).any():
                 print('problem is only in original points have nan values before model')
-                    
+            # now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+            # points_stats = points.detach().cpu().numpy()
+            # with open(f'xyz_{now}.npy', 'wb') as f:
+            #    np.save(f, points_stats)
+            # print(f'max-min in z is {np.amax(points_stats[...,2])}, {np.amin(points_stats[...,2])} \n')
+            # print(f'max-min in x is {np.amax(points_stats[...,0])}, {np.amin(points_stats[...,0])} \n')
+            # print(f'max-min in y is {np.amax(points_stats[...,1])}, {np.amin(points_stats[...,1])} \n')
 
             use_viewdirs = hasattr(model, "use_viewdirs") and model.use_viewdirs
 

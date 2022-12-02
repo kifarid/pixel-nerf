@@ -64,7 +64,7 @@ def extra_args(parser):
 args, conf = util.args.parse_args(extra_args, training=True, default_ray_batch_size=128)
 device = util.get_cuda(args.gpu_id[0])
 
-dset, val_dset, _ = get_split_dataset(args.dataset_format, args.datadir, views_per_scene=args.views_per_scene)
+dset, val_dset, _ = get_split_dataset(args.dataset_format, conf.data.datadir, views_per_scene=args.views_per_scene)
 print(
     "dset z_near {}, z_far {}, lindisp {}".format(dset.z_near, dset.z_far, dset.lindisp)
 )
@@ -99,10 +99,10 @@ class PixelNeRFTrainer(trainlib.Trainer):
             "lambda coarse {} and fine {}".format(self.lambda_coarse, self.lambda_fine)
         )
         self.rgb_coarse_crit = loss.get_rgb_loss(conf.loss["rgb"], True)
-        fine_loss_conf = conf["loss.rgb"]
+        fine_loss_conf = conf.loss["rgb"]
         if "rgb_fine" in conf["loss"]:
             print("using fine loss")
-            fine_loss_conf = conf["loss.rgb_fine"]
+            fine_loss_conf = conf.loss["rgb_fine"]
         self.rgb_fine_crit = loss.get_rgb_loss(fine_loss_conf, False)
 
         if args.resume:
@@ -119,7 +119,8 @@ class PixelNeRFTrainer(trainlib.Trainer):
         self.use_bbox = args.no_bbox_step > 0
 
     def post_batch(self, epoch, batch):
-        renderer.sched_step(args.batch_size)
+        pass
+        #renderer.sched_step(args.batch_size)
 
     def extra_save_state(self):
         torch.save(renderer.state_dict(), self.renderer_state_path)
