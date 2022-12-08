@@ -1,0 +1,35 @@
+data:
+  datadir: data/srn_block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+  format: ravens
+  views_per_scene: 3
+renderer:
+  white_bkgd: false
+  no_bbox_step: 0
+  bound_floor: false
+  gpus:
+train:
+  wandb: true
+  project: Nerf_for_control
+  entity: kifarid
+
+model:
+  use_encoder: false
+  use_global_encoder: true
+  global_encoder:
+    backbone: resnet34
+    pretrained: true
+    num_layers: 2
+    type: field
+    start:
+    - -0.5
+    - -1
+    - -0.1
+    end:
+    - 1.5
+    - 1
+    - 0.75
+    voxel_size: 0.0625
+    vol_conv_num_layers: 3
+    vol_conv_num_units: 128
+    vol_fc_layers: 3
+    vol_fc_units: 300

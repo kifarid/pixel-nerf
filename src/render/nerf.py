@@ -165,7 +165,7 @@ class NeRFRenderer(torch.nn.Module):
         """
         with profiler.record_function("renderer_composite"):
             B, K = z_samp.shape
-            #print('z samp in nerf renderer:', z_samp.min(dim=0).values, z_samp.min(dim=0).values, '\n')
+            # print('z samp in nerf renderer:', z_samp.min(dim=0).values, z_samp.min(dim=0).values, '\n')
 
             deltas = z_samp[:, 1:] - z_samp[:, :-1]  # (B, K-1)
             #  if far:
@@ -176,6 +176,7 @@ class NeRFRenderer(torch.nn.Module):
             # (B, K, 3)
             points = rays[:, None, :3] + z_samp.unsqueeze(2) * rays[:, None, 3:6]
             points = points.reshape(-1, 3)  # (B*K, 3)
+            #print("initial points shape:", points.shape)
             if torch.isnan(points).any() or torch.isinf(points).any():
                 print('problem is only in original points have nan values before model')
             # now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
@@ -187,7 +188,6 @@ class NeRFRenderer(torch.nn.Module):
             # print(f'max-min in y is {np.amax(points_stats[...,1])}, {np.amin(points_stats[...,1])} \n')
 
             use_viewdirs = hasattr(model, "use_viewdirs") and model.use_viewdirs
-
             val_all = []
             if sb > 0:
                 points = points.reshape(
@@ -200,6 +200,8 @@ class NeRFRenderer(torch.nn.Module):
                 eval_batch_dim = 0
 
             split_points = torch.split(points, eval_batch_size, dim=eval_batch_dim)
+            #print([(i, p.shape) for i, p in enumerate(split_points)])
+            #print("split points shape:", eval_batch_size, eval_batch_dim, points.shape)
             if use_viewdirs:
                 dim1 = K
                 viewdirs = rays[:, None, 3:6].expand(-1, dim1, -1)  # (B, K, 3)
@@ -211,19 +213,30 @@ class NeRFRenderer(torch.nn.Module):
                     viewdirs, eval_batch_size, dim=eval_batch_dim
                 )
                 for pnts, dirs in zip(split_points, split_viewdirs):
-                    if torch.isnan(pnts).any() or torch.isinf(pnts).any():
-                        print('problem is only in pnts have nan values before model')
-                    for latent in model.encoder.latents:
-                        if torch.isnan(latent).any() or torch.isinf(latent).any():
-                            print('latents have nan values before model')
-
+                    # if torch.isnan(pnts).any() or torch.isinf(pnts).any():
+                    #     print('problem is only in pnts have nan values before model')
+                    # if model.use_encoder:
+                    #     for latent in model.encoder.latents:
+                    #         if torch.isnan(latent).any() or torch.isinf(latent).any():
+                    #             print('latents have nan values before model')
+                    # elif model.use_global_encoder:
+                    #     latent = model.global_encoder.latent
+                    #     if torch.isnan(latent).any() or torch.isinf(latent).any():
+                    #         print('latents have nan values before model')
+                    #print("before forward pass")
                     model_o = model(pnts, coarse=coarse, viewdirs=dirs)
+                    #print("model output shape:", model_o.shape)
                     if torch.isnan(model_o).any() or torch.isinf(model_o).any():
                         print('model_o has nan values')
 
-                    for latent in model.encoder.latents:
+                    if model.use_encoder:
+                        for latent in model.encoder.latents:
+                            if torch.isnan(latent).any() or torch.isinf(latent).any():
+                                print('latents have nan values before model')
+                    elif model.use_global_encoder:
+                        latent = model.global_encoder.latent
                         if torch.isnan(latent).any() or torch.isinf(latent).any():
-                            print('latents have nan values')
+                            print('latents have nan values before model')
                     val_all.append(model(pnts, coarse=coarse, viewdirs=dirs))
             else:
                 for pnts in split_points:
@@ -256,6 +269,7 @@ class NeRFRenderer(torch.nn.Module):
                 # White background
                 pix_alpha = weights.sum(dim=1)  # (B), pixel alpha
                 rgb_final = rgb_final + 1 - pix_alpha.unsqueeze(-1)  # (B, 3)
+
             return (
                 weights,
                 rgb_final,
@@ -280,12 +294,10 @@ class NeRFRenderer(torch.nn.Module):
             assert len(rays.shape) == 3
             superbatch_size = rays.shape[0]
             rays = rays.reshape(-1, 8)  # (SB * B, 8)
-
             z_coarse = self.sample_coarse(rays)  # (B, Kc)
             coarse_composite = self.composite(
                 model, rays, z_coarse, coarse=True, sb=superbatch_size,
             )
-
             outputs = DotMap(
                 coarse=self._format_outputs(
                     coarse_composite, superbatch_size, want_weights=want_weights,
@@ -310,7 +322,7 @@ class NeRFRenderer(torch.nn.Module):
                 outputs.fine = self._format_outputs(
                     fine_composite, superbatch_size, want_weights=want_weights,
                 )
-
+            print("finished rendering")
             return outputs
 
     def _format_outputs(

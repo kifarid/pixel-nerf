@@ -1,5 +1,5 @@
 import numpy as np
-import pytorch_lightening as pl
+import pytorch_lightning as pl
 import torch
 import util
 from dotmap import DotMap
@@ -59,41 +59,48 @@ from render import NeRFRenderer
 
 class NeRFAE(pl.LightningModule):
     def __init__(self,
-                 conf,
+                 renderer_config,
+                 model_config,
+                 loss_config,
+                 base_learning_rate=1e-4,
                  ckpt_path=None,
                  ignore_keys=[],
                  monitor=None,
                  ):
         super().__init__()
         self.save_hyperparameters()
-        self.net = make_model(conf["model"])  # .to(device=self.device)
-        self.net.stop_encoder_grad = conf["model"].freeze_enc
-        if conf["model"].freeze_enc:
+        self.net = make_model(model_config)  # .to(device=self.device)
+        self.net.stop_encoder_grad = model_config.freeze_enc
+        if model_config.freeze_enc:
             print("Encoder frozen")
             self.net.encoder.eval()
 
-        self.lambda_coarse = conf["loss"].get("lambda_coarse")
-        self.lambda_fine = conf["loss"].get("lambda_fine", 1.0)
-        self.no_bbox_step = conf.conf["renderer"].no_bbox_step
+        self.lambda_coarse = loss_config.get("lambda_coarse")
+        self.lambda_fine = loss_config.get("lambda_fine", 1.0)
+        self.no_bbox_step = renderer_config.no_bbox_step
         self.use_bbox = self.no_bbox_step > 0
         # self.learning_rate = conf["model"].learning
 
-        self.renderer = NeRFRenderer.from_conf(conf["renderer"], lindisp=False)  # .to(
+        self.renderer = NeRFRenderer.from_conf(renderer_config, lindisp=False)  # .to(
         #     device=device
         # )
 
         # Parallize
-        self.render_par = self.renderer.bind_parallel(self.net, conf["renderer"].gpus).eval()
+        self.render_par = self.renderer.bind_parallel(self.net, renderer_config.gpus).eval()
 
-        self.nviews = conf["model"].nviews
+        self.nviews = model_config.nviews
         self.nviews = list(map(int, self.nviews.split()))
-        self.loss_from_config(conf["loss"])
-        self.gamma = conf["model"].gamma
+        self.loss_from_config(loss_config)
+        self.gamma = model_config.gamma
 
         if monitor is not None:
             self.monitor = monitor
         if ckpt_path is not None:
             self.init_from_ckpt(ckpt_path, ignore_keys=ignore_keys)
+
+        self.ray_batch_size = renderer_config.ray_batch_size
+        self.z_near = renderer_config.z_near
+        self.z_far = renderer_config.z_far
 
     def loss_from_config(self, lossconfig):
 
@@ -158,7 +165,6 @@ class NeRFAE(pl.LightningModule):
             rgb_gt_all = (
                 rgb_gt_all.permute(0, 2, 3, 1).contiguous().reshape(-1, 3)
             )  # (NV, H, W, 3)
-
             if all_bboxes is not None:
                 pix = util.bbox_sample(bboxes, self.ray_batch_size)
                 pix_inds = pix[..., 0] * H * W + pix[..., 1] * W + pix[..., 2]
@@ -183,7 +189,6 @@ class NeRFAE(pl.LightningModule):
         src_poses = util.batched_index_select_nd(all_poses, image_ord)  # (SB, NS, 4, 4)
 
         all_bboxes = all_poses = all_images = None
-
         self.net.encode(
             src_images,
             src_poses,
@@ -206,22 +211,33 @@ class NeRFAE(pl.LightningModule):
             loss_dict["rf"] = fine_loss.item() * self.lambda_fine
 
         loss = rgb_loss
-        if is_train:
-            loss.backward()
-        loss_dict["t"] = loss.item()
-
+        # if is_train:
+        #     loss.backward()
+        #loss_dict["t"] = loss.item()
+        loss_dict["loss"] = loss
         return loss_dict
 
-    def train_step(self, data, batch_idx):
-        return self.calc_losses(data, is_train=True)
+    def training_step(self, data, batch_idx):
+        loss_dict = self.calc_losses(data, is_train=True)
+        self.log("train_loss", loss_dict, on_step=True, on_epoch=True)
+        return loss_dict
 
-    def eval_step(self, data, batch_idx):
+    def validation_step(self, data, batch_idx):
         self.renderer.eval()
         losses = self.calc_losses(data, is_train=False)
+        self.log("val_loss", losses, on_step=False, on_epoch=True)
         self.renderer.train()
         return losses
 
-    def vis_step(self, data, batch_idx, idx=None):
+    def test_step(self, data, batch_idx):
+        self.renderer.eval()
+        losses = self.calc_losses(data, is_train=False)
+        self.log("val_loss", losses, on_step=False, on_epoch=True)
+        self.renderer.train()
+        return losses
+
+    def log_images(self, data, idx=None, **kwargs):
+        #print("in log images")
         if "images" not in data:
             return {}
         if idx is None:
@@ -268,6 +284,7 @@ class NeRFAE(pl.LightningModule):
                 focal,  # .to(device=device),
                 c=c if c is not None else None,  # .to(device=device)
             )
+            print("encoded test images shape", self.net.get_latent().shape)
             test_rays = test_rays.reshape(1, H * W, -1)
             render_dict = DotMap(self.render_par(test_rays, want_weights=True))
             coarse = render_dict.coarse
@@ -327,12 +344,15 @@ class NeRFAE(pl.LightningModule):
             rgb_psnr = rgb_coarse_np
 
         psnr = util.psnr(rgb_psnr, gt)
-        vals = {"psnr": psnr}
         print("psnr", psnr)
-
+        self.log("psnr", psnr, on_step=False, on_epoch=True)
         # set the renderer network back to train mode
         self.renderer.train()
-        return vis, vals
+
+        vis_t=torch.from_numpy(vis).unsqueeze(0).permute(0, 3, 1, 2)
+        print("vis tshape", vis_t.shape)
+        vis_dict = {"images": vis_t}
+        return vis_dict
 
     def init_from_ckpt(self, path, ignore_keys=list()):
         sd = torch.load(path, map_location="cpu")["state_dict"]
@@ -372,9 +392,3 @@ class NeRFAE(pl.LightningModule):
 
         return optim
 
-
-if __name__ == "__main__":
-    dset, val_dset, _ = get_split_dataset(args.dataset_format, args.datadir, views_per_scene=args.views_per_scene)
-    print(
-        "dset z_near {}, z_far {}, lindisp {}".format(dset.z_near, dset.z_far, dset.lindisp)
-    )

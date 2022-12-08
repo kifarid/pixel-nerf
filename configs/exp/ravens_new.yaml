@@ -1,0 +1,104 @@
+renderer:
+  white_bkgd: false
+  no_bbox_step: 0
+  bound_floor: false
+  gpus:
+  ray_batch_size: 128 #1024
+
+train:
+
+data:
+  target: main.DataModuleFromConfig
+  params:
+    batch_size: 4
+    wrap: True
+    train:
+      target: src.data.RavensDataset.RDataset
+      params:
+        path:  data/srn_block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        stage: train
+        views_per_scene: 3
+        z_near: 0.01
+        z_far: 1.6
+
+    validation:
+      target: src.data.RavensDataset.RDataset
+      params:
+        path: data/srn_block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        stage: val
+        views_per_scene: 3
+        z_near: 0.01
+        z_far: 1.6
+
+    test:
+      target: src.data.RavensDataset.RDataset
+      params:
+        path: data/srn_block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        stage: test
+        views_per_scene: 3
+        z_near: 0.01
+        z_far: 1.6
+
+model:
+  # MLP architecture
+  # Adapted for multiview
+  # Possibly too big
+  gamma: 1.0
+  base_learning_rate: 1e-4
+  use_encoder: true
+  freeze_enc: false
+  use_global_encoder: false
+  use_xyz: true
+  canon_xyz: false
+  use_code: true
+  code:
+    num_freqs: 6
+    freq_factor: 1.5
+    include_input: true
+  use_viewdirs: true
+  use_code_viewdirs: false
+  mlp_coarse:
+    type: resnet
+    n_blocks: 5
+    d_hidden: 512
+    # Combine after 3rd layer by average
+    combine_layer: 3
+    combine_type: average
+  mlp_fine:
+    type: resnet
+    n_blocks: 5
+    d_hidden: 512
+    combine_layer: 3
+    combine_type: average
+  nviews: '1'
+  encoder:
+    backbone: resnet34
+    pretrained: true
+    num_layers: 4
+
+loss:
+  rgb:
+    use_l1: false
+  rgb_fine:
+    use_l1: false
+  alpha:
+    lambda_alpha: 0.0
+    clamp_alpha: 100
+    init_epoch: 5
+  lambda_coarse: 1.0
+  lambda_fine: 1.0
+
+lightning:
+#  callbacks:
+#    wandb:
+#      target: pytorch_lightning.loggers.WandbLogger
+#      params:
+#        project: Nerf_for_control
+
+  trainer:
+    benchmark: True
+    log_every_n_steps: 1
+    accumulate_grad_batches: 1
+    limit_train_batches: 4
+    limit_val_batches: 2
+    limit_test_batches: 1

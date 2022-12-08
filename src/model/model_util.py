@@ -1,4 +1,4 @@
-from .encoder import SpatialEncoder, ImageEncoder
+from .encoder import SpatialEncoder, ImageEncoder, FieldEncoder
 from .resnetfc import ResnetFC
 
 
@@ -21,6 +21,8 @@ def make_encoder(conf, **kwargs):
         net = SpatialEncoder.from_conf(conf, **kwargs)
     elif enc_type == "global":
         net = ImageEncoder.from_conf(conf, **kwargs)
+    elif enc_type == "field":
+        net = FieldEncoder.from_conf(conf, **kwargs)
     else:
         raise NotImplementedError("Unsupported encoder type")
     return net

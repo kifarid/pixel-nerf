@@ -16,7 +16,7 @@ class RDataset(torch.utils.data.Dataset):
     """
 
     def __init__(
-            self, path, stage="train", image_size=(120, 160), world_scale=1.0, views_per_scene=12
+            self, path, stage="train", z_near=0.01, z_far=1.6, image_size=(120, 160), world_scale=1.0, views_per_scene=12
     ):
         """
         :param stage train | val | test
@@ -53,8 +53,8 @@ class RDataset(torch.utils.data.Dataset):
             torch.tensor([1, -1, -1, 1], dtype=torch.float32)
         )
 
-        self.z_near =  0.01 #0.1
-        self.z_far = 1.6 #1.6
+        self.z_near = z_near #0.1
+        self.z_far = z_far #1.6
         self.lindisp = False
 
     def __len__(self):

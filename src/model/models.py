@@ -20,6 +20,7 @@ class PixelNeRFNet(torch.nn.Module):
         """
         super().__init__()
         self.encoder = make_encoder(conf["encoder"])
+        self.encoder_type = conf.encoder.get("type", "spatial")
         self.use_encoder = conf.get("use_encoder", True)  # Image features?
 
         self.use_xyz = conf.get("use_xyz", False)
@@ -62,7 +63,8 @@ class PixelNeRFNet(torch.nn.Module):
 
         if self.use_global_encoder:
             # Global image feature
-            self.global_encoder = ImageEncoder.from_conf(conf["global_encoder"])
+            self.global_encoder = make_encoder(conf["global_encoder"]) #ImageEncoder.from_conf(conf["global_encoder"])
+            self.global_encoder_type = conf.global_encoder.get("type", "field")
             self.global_latent_size = self.global_encoder.latent_size
             d_latent += self.global_latent_size
 
@@ -97,6 +99,7 @@ class PixelNeRFNet(torch.nn.Module):
         :param c principal point None or () or (2) or (NS) or (NS, 2) [cx, cy],
         default is center of image
         """
+        assert self.use_encoder or self.use_global_encoder
         self.num_objs = images.size(0)
         if len(images.shape) == 5:
             assert len(poses.shape) == 4
@@ -109,11 +112,9 @@ class PixelNeRFNet(torch.nn.Module):
         else:
             self.num_views_per_obj = 1
 
-        self.encoder(images)
         rot = poses[:, :3, :3].transpose(1, 2)  # (B, 3, 3)
         trans = -torch.bmm(rot, poses[:, :3, 3:])  # (B, 3, 1)
         self.poses = torch.cat((rot, trans), dim=-1)  # (B, 3, 4)
-
         self.image_shape[0] = images.shape[-1]
         self.image_shape[1] = images.shape[-2]
 
@@ -142,7 +143,64 @@ class PixelNeRFNet(torch.nn.Module):
         self.c = c
 
         if self.use_global_encoder:
+            if self.global_encoder_type == "field":
+                self.pass_to_global_encoder(poses=self.poses,
+                                            c=self.c,
+                                            focal=self.focal,
+                                            num_views_per_obj=self.num_views_per_obj,
+                                            image_shape=self.image_shape,
+                                            num_objs=self.num_objs)
+
+        if self.use_encoder:
+            self.encoder(images)
+        if self.use_global_encoder:
             self.global_encoder(images)
+
+
+    def pass_to_global_encoder(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self.global_encoder, k, v)
+
+    def transform_to_cam(self, xyz_local):
+        NS = self.num_views_per_obj
+        divisor = xyz_local[:, :, 2:]
+        divisor = torch.where(torch.abs(divisor) > 1e-4, divisor, torch.full(divisor.size(), 1e-4).to(divisor))
+        uv = -xyz_local[:, :, :2] / divisor  # (SB, B, 2)
+
+        uv *= repeat_interleave(
+            self.focal.unsqueeze(1), NS if self.focal.shape[0] > 1 else 1
+        )
+        uv += repeat_interleave(
+            self.c.unsqueeze(1), NS if self.c.shape[0] > 1 else 1
+        )  # (SB*NS, B, 2)
+        return uv
+
+    def transform_to_local(self, xyz):
+        xyz_rot = torch.matmul(self.poses[:, None, :3, :3], xyz.unsqueeze(-1))[
+            ..., 0
+        ]
+        xyz = xyz_rot + self.poses[:, None, :3, 3]
+        return xyz
+
+    def get_latent(self):
+        global_latent, latent = None, None
+        if self.use_encoder:
+            latent = self.encoder.latent
+            print("in get_latent, latent shape is:", latent.shape)
+            if len(latent.size()) > 2:
+                rem = tuple(range(1, len(latent.size())-1))
+                print(rem)
+                latent = latent.mean(dim=rem)
+        if self.use_global_encoder:
+            global_latent = self.global_encoder.latent
+        print("in get_latent, after mean latent shape is:", latent.shape)
+        out = None
+        if self.use_global_encoder and self.use_encoder:
+            out = torch.cat((latent, global_latent), dim=-1)
+        else:
+            out = latent if self.use_encoder else global_latent
+
+        return out
 
     def forward(self, xyz, coarse=True, viewdirs=None, far=False):
         """
@@ -160,10 +218,8 @@ class PixelNeRFNet(torch.nn.Module):
 
             # Transform query points into the camera spaces of the input views
             xyz = repeat_interleave(xyz, NS)  # (SB*NS, B, 3)
-            xyz_rot = torch.matmul(self.poses[:, None, :3, :3], xyz.unsqueeze(-1))[
-                ..., 0
-            ]
-            xyz = xyz_rot + self.poses[:, None, :3, 3]
+            xyz = self.transform_to_local(xyz)
+            xyz_rot = xyz - self.poses[:, None, :3, 3]
 
             if self.d_in > 0:
                 # * Encode the xyz coordinates
@@ -204,16 +260,7 @@ class PixelNeRFNet(torch.nn.Module):
             #print('point stats in camera coord:', xyz.reshape(-1, 3).max(dim=0).values, xyz.reshape(-1, 3).min(dim=0).values, xyz.reshape(-1, 3).mean(dim=0).values,  '\n')
             if self.use_encoder:
                 # Grab encoder's latent code.
-                divisor = xyz[:, :, 2:]
-                divisor = torch.where(torch.abs(divisor)>1e-4, divisor, torch.full(divisor.size(),1e-4).to(divisor))
-                uv = -xyz[:, :, :2] / divisor  # (SB, B, 2)
-
-                uv *= repeat_interleave(
-                    self.focal.unsqueeze(1), NS if self.focal.shape[0] > 1 else 1
-                )
-                uv += repeat_interleave(
-                    self.c.unsqueeze(1), NS if self.c.shape[0] > 1 else 1
-                )  # (SB*NS, B, 2)
+                uv = self.transform_to_cam(xyz)
                 latent = self.encoder.index(
                     uv, None, self.image_shape
                 )  # (SB * NS, latent, B)

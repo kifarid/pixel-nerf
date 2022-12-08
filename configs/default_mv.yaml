@@ -52,7 +52,9 @@ loss:
   lambda_coarse: 1.0
   lambda_fine: 1.0
 train:
+  epochs: 1000
   lr: 1e-4
+  ray_batch_size: 50000
   batch_size: 4
   print_interval: 2
   save_interval: 50
@@ -60,3 +62,6 @@ train:
   eval_interval: 50
   accu_grad: 1
   num_epoch_repeats: 1
+data:
+  batch_size: 4
+  datadir:

@@ -1,0 +1,71 @@
+# Main multiview supported config
+model:
+  #target: src.model.nerf_ae.NeRFAE
+  params:
+    base_learning_rate: 1e-4
+    model_config:
+      # MLP architecture
+      # Adapted for multiview
+      # Possibly too big
+      gamma: 1.0
+      use_encoder: true
+      freeze_enc: false
+      use_global_encoder: false
+      use_xyz: true
+      canon_xyz: false
+      use_code: true
+      code:
+        num_freqs: 6
+        freq_factor: 1.5
+        include_input: true
+      use_viewdirs: true
+      use_code_viewdirs: false
+      mlp_coarse:
+        type: resnet
+        n_blocks: 5
+        d_hidden: 512
+        # Combine after 3rd layer by average
+        combine_layer: 3
+        combine_type: average
+      mlp_fine:
+        type: resnet
+        n_blocks: 5
+        d_hidden: 512
+        combine_layer: 3
+        combine_type: average
+      nviews: 1
+      encoder:
+        backbone: resnet34
+        pretrained: true
+        num_layers: 4
+    renderer_config:
+      n_coarse: 64
+      n_fine: 32
+      n_fine_depth: 16
+      depth_std: 0.01
+      white_bkgd: true
+    loss_config:
+      rgb:
+        use_l1: false
+      rgb_fine:
+        use_l1: false
+      alpha:
+        lambda_alpha: 0.0
+        clamp_alpha: 100
+        init_epoch: 5
+      lambda_coarse: 1.0
+      lambda_fine: 1.0
+train:
+  epochs: 1000
+  lr: 1e-4
+  ray_batch_size: 50000
+  batch_size: 4
+  print_interval: 2
+  save_interval: 50
+  vis_interval: 100
+  eval_interval: 50
+  accu_grad: 1
+  num_epoch_repeats: 1
+data:
+  batch_size: 4
+  datadir:
