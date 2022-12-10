@@ -139,9 +139,9 @@ class NeRFAE(pl.LightningModule):
 
         curr_nviews = self.nviews[torch.randint(0, len(self.nviews), ()).item()]
         if curr_nviews == 1:
-            image_ord = torch.randint(0, NV, (SB, 1))
+            image_ord = torch.randint(0, NV, (SB, 1)).to(self.device)
         else:
-            image_ord = torch.empty((SB, curr_nviews), dtype=torch.long)
+            image_ord = torch.empty((SB, curr_nviews), dtype=torch.long).to(self.device)
         for obj_idx in range(SB):
             if all_bboxes is not None:
                 bboxes = all_bboxes[obj_idx]
@@ -172,9 +172,9 @@ class NeRFAE(pl.LightningModule):
                 pix_inds = torch.randint(0, NV * H * W, (self.ray_batch_size,))
 
             rgb_gt = rgb_gt_all[pix_inds]  # (ray_batch_size, 3)
-            rays = cam_rays.view(-1, cam_rays.shape[-1])[pix_inds]  # .to(
-            #    device=device
-            # )  # (ray_batch_size, 8)
+            rays = cam_rays.view(-1, cam_rays.shape[-1])[pix_inds].to(
+             device=self.device
+            )  # (ray_batch_size, 8)
 
             all_rgb_gt.append(rgb_gt)
             all_rays.append(rays)
@@ -182,7 +182,7 @@ class NeRFAE(pl.LightningModule):
         all_rgb_gt = torch.stack(all_rgb_gt)  # (SB, ray_batch_size, 3)
         all_rays = torch.stack(all_rays)  # (SB, ray_batch_size, 8)
 
-        image_ord = image_ord  # .to(device)
+        image_ord = image_ord.to(self.device)
         src_images = util.batched_index_select_nd(
             all_images, image_ord
         )  # (SB, NS, 3, H, W)
@@ -284,7 +284,7 @@ class NeRFAE(pl.LightningModule):
                 focal,  # .to(device=device),
                 c=c if c is not None else None,  # .to(device=device)
             )
-            print("encoded test images shape", self.net.get_latent().shape)
+            #print("encoded test images shape", self.net.get_latent().shape)
             test_rays = test_rays.reshape(1, H * W, -1)
             render_dict = DotMap(self.render_par(test_rays, want_weights=True))
             coarse = render_dict.coarse

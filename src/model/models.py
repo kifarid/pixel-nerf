@@ -186,14 +186,12 @@ class PixelNeRFNet(torch.nn.Module):
         global_latent, latent = None, None
         if self.use_encoder:
             latent = self.encoder.latent
-            print("in get_latent, latent shape is:", latent.shape)
             if len(latent.size()) > 2:
                 rem = tuple(range(1, len(latent.size())-1))
                 print(rem)
                 latent = latent.mean(dim=rem)
         if self.use_global_encoder:
             global_latent = self.global_encoder.latent
-        print("in get_latent, after mean latent shape is:", latent.shape)
         out = None
         if self.use_global_encoder and self.use_encoder:
             out = torch.cat((latent, global_latent), dim=-1)

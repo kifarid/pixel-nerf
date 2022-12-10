@@ -322,7 +322,7 @@ class NeRFRenderer(torch.nn.Module):
                 outputs.fine = self._format_outputs(
                     fine_composite, superbatch_size, want_weights=want_weights,
                 )
-            print("finished rendering")
+            #print("finished rendering")
             return outputs
 
     def _format_outputs(
