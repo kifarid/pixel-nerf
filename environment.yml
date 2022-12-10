@@ -1,13 +1,20 @@
 # run: conda env create -f environment.yml
-name: pixelnerf
+name: nerf_rl
 channels:
   - pytorch
+  - pytorch3d
   - defaults
+  - nvidia
+  - fvcore
+  - iopath
+  - conda-forge
+  - bottler
 dependencies:
   - python>=3.8
   - pip
   - pip:
       - pyhocon
+      - plotly
       - opencv-python
       - dotmap
       - tensorboard
@@ -18,10 +25,19 @@ dependencies:
       - lpips
       - tensorflow
       - wandb
+      - omegaconf
+      - pytorch-lightning
+  
   - scipy
   - numpy
   - matplotlib
-  - pytorch==1.6.0
-  - torchvision==0.7.0
-  - scikit-image==0.17.2
+  - pytorch #==1.6.0
+  - torchvision #==0.7.0
+  - scikit-image #==0.17.2
+  - pytorch-cuda==11.6
   - tqdm
+  - fvcore
+  - iopath
+  - nvidiacub
+  - jupyter
+  - pytorch3d

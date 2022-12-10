@@ -366,6 +366,7 @@ class FieldEncoder(nn.Module):
         :param x image (B, C, H, W)
         :return latent (B, latent_size, H, W)
         """
+        self.device = x.device
         if self.feature_scale != 1.0:
             x = F.interpolate(
                 x,
@@ -374,7 +375,7 @@ class FieldEncoder(nn.Module):
                 align_corners=True if self.feature_scale > 1.0 else None,
                 recompute_scale_factor=True,
             )
-        x = x.to(device=self.latent.device)
+       #x = x.to(device=self.latent.device)
 
         if self.use_custom_resnet:
             self.unaligned_latent = self.model(x)
@@ -465,7 +466,7 @@ class FieldEncoder(nn.Module):
             densities=torch.zeros(latent.size(0), 1, *(grid_max, grid_max, grid_max)).float(),
             volume_translation=-torch.from_numpy((self.end + self.start) / 2).float(),
             voxel_size=self.voxel_size,
-        )
+        ).to(self.device)
         updated_volumes = add_pointclouds_to_volumes(
             pointclouds=pointclouds,
             initial_volumes=initial_volumes,
@@ -482,7 +483,7 @@ class FieldEncoder(nn.Module):
         dim_grid = torch.meshgrid(dim_grid)
         dim_grid = torch.stack(dim_grid, dim=-1).flatten(end_dim=-2)
 
-        return dim_grid
+        return dim_grid.to(self.device)
 
     @classmethod
     def from_conf(cls, conf):

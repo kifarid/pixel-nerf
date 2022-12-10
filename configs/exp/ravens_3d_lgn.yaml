@@ -14,11 +14,29 @@ model:
       # MLP architecture
       # Adapted for multiview
       # Possibly too big
+      use_encoder: false
+      use_global_encoder: true
+      global_encoder:
+        backbone: resnet34
+        pretrained: true
+        num_layers: 3
+        type: field
+        start:
+        - -0.5
+        - -1
+        - -0.1
+        end:
+        - 1.5
+        - 1
+        - 0.75
+        voxel_size: 0.0625
+        vol_conv_num_layers: 3
+        vol_conv_num_units: 128
+        vol_fc_layers: 3
+        vol_fc_units: 300
       gamma: 1.0
       base_learning_rate: 1e-4
-      use_encoder: true
       freeze_enc: false
-      use_global_encoder: false
       use_xyz: true
       canon_xyz: false
       use_code: true
@@ -41,11 +59,7 @@ model:
         d_hidden: 512
         combine_layer: 3
         combine_type: average
-      nviews: '1'
-      encoder:
-        backbone: resnet34
-        pretrained: true
-        num_layers: 4
+      nviews: '2'
     loss_config:
       rgb:
         use_l1: false
@@ -66,7 +80,7 @@ data:
     train:
       target: src.data.RavensDataset.RDataset
       params:
-        path:  /work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion #data/srn_block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        path:  /work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         stage: train
         views_per_scene: 3
         z_near: 0.01

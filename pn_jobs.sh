@@ -6,8 +6,9 @@ echo "Running job $SLURM_JOB_NAME using $SLURM_JOB_CPUS_PER_NODE cpus per node w
 
 # shellcheck disable=SC1091
 source ~/.bashrc                                                                                                                                                                         
-conda activate pixelnerf
-sbatch train_script_default.sh
+conda activate nerf_rl
+sbatch train_default_lit.sh
+#sbatch train_script_default.sh
 # sbatch train_script_masks_no_vps_3.sh
 # sbatch train_script_masks_no_vps_5.sh
 # sbatch train_script_masks_no.sh
