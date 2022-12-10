@@ -7,56 +7,6 @@ from model import make_model, loss
 from render import NeRFRenderer
 
 
-# TODO move to parser to main, set z near and far in trainer from dset and learning rate
-# TODO move data set to main too
-#
-# def extra_args(parser):
-#     parser.add_argument(
-#         "--batch_size", "-B", type=int, default=4, help="Object batch size ('SB')"
-#     )
-#     parser.add_argument(
-#         "--nviews",
-#         "-V",
-#         type=str,
-#         default="1",
-#         help="Number of source views (multiview); put multiple (space delim) to pick randomly per batch ('NV')",
-#     )
-#
-#     parser.add_argument(
-#         "--views_per_scene",
-#         type=int,
-#         default=3,
-#         help="Number of views to consider per 1 scene",
-#     )
-#     parser.add_argument(
-#         "--freeze_enc",
-#         action="store_true",
-#         default=None,
-#         help="Freeze encoder weights and only train MLP",
-#     )
-#
-#     parser.add_argument(
-#         "--no_bbox_step",
-#         type=int,
-#         default=100000,
-#         help="Step to stop using bbox sampling",
-#     )
-#     parser.add_argument(
-#         "--fixed_test",
-#         action="store_true",
-#         default=None,
-#         help="Freeze encoder weights and only train MLP",
-#     )
-#     return parser
-#
-#
-# args, conf = util.args.parse_args(extra_args, training=True, default_ray_batch_size=128)
-# dset, val_dset, _ = get_split_dataset(args.dataset_format, args.datadir, views_per_scene=args.views_per_scene)
-# print(
-#     "dset z_near {}, z_far {}, lindisp {}".format(dset.z_near, dset.z_far, dset.lindisp)
-# )
-#
-
 class NeRFAE(pl.LightningModule):
     def __init__(self,
                  renderer_config,
@@ -284,7 +234,7 @@ class NeRFAE(pl.LightningModule):
                 focal,  # .to(device=device),
                 c=c if c is not None else None,  # .to(device=device)
             )
-            print("encoded test images shape", self.net.get_latent().shape)
+
             test_rays = test_rays.reshape(1, H * W, -1)
             render_dict = DotMap(self.render_par(test_rays, want_weights=True))
             coarse = render_dict.coarse

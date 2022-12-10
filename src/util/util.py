@@ -81,6 +81,20 @@ def get_mask_to_tensor():
         [transforms.ToTensor(), transforms.Normalize((0.0,), (1.0,))]
     )
 
+#TODO(Karim) make generic no matter what is the type of the space
+def action_dict_to_tensor(action):
+    # convert action to tensor
+    act_dict = {}
+    for k, v in action.items():
+        # check if v is tuple then loop and convert to torch tensor
+        if isinstance(v, tuple):
+            for i in range(len(v)):
+                act_dict[f"{k}_{i}"] = torch.tensor(v[i])
+        else:
+            act_dict[k] = torch.tensor(v)
+
+    return act_dict
+
 
 def homogeneous(points):
     """

@@ -7,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 import torch
 import torch.nn.functional as F
-from util import get_image_to_tensor_balanced, get_mask_to_tensor
+from util import get_image_to_tensor_balanced, get_mask_to_tensor, action_dict_to_tensor
 
 
 class RDataset(torch.utils.data.Dataset):
@@ -66,6 +66,11 @@ class RDataset(torch.utils.data.Dataset):
         rgb_paths = sorted(glob.glob(os.path.join(dir_path, "rgb", "*")))[:self.views_per_scene]
         mask_paths = sorted(glob.glob(os.path.join(dir_path, "segm", "*")))[:self.views_per_scene]
         pose_paths = sorted(glob.glob(os.path.join(dir_path, "pose", "*")))[:self.views_per_scene]
+        act_path = sorted(glob.glob(os.path.join(dir_path, "actions", "*")))[0]
+
+        with tf.io.gfile.GFile(act_path, 'rb') as f:
+            act = pickle.load(f)
+            act = action_dict_to_tensor(act)
 
         if len(mask_paths) == 0:
             mask_paths = [None] * len(rgb_paths)
@@ -102,8 +107,8 @@ class RDataset(torch.utils.data.Dataset):
             )
             pose = pose @ self._coord_trans
 
-            rows = np.any(mask, axis=1) #width
-            cols = np.any(mask, axis=0) #height 
+            rows = np.any(mask, axis=1)
+            cols = np.any(mask, axis=0)
             rnz = np.where(rows)[0]
             cnz = np.where(cols)[0]
             if len(rnz) == 0:
@@ -149,5 +154,6 @@ class RDataset(torch.utils.data.Dataset):
             "masks": all_masks,
             "bbox": all_bboxes,
             "poses": all_poses,
+            "actions": act
         }
         return result
