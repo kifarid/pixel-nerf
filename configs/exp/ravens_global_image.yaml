@@ -16,9 +16,13 @@ model:
       # Possibly too big
       gamma: 1.0
       base_learning_rate: 1e-4
-      use_encoder: true
-      freeze_enc: true #false
-      use_global_encoder: false
+      use_encoder: false
+      freeze_enc: true
+      use_global_encoder: true
+      global_encoder:
+        backbone: resnet34
+        pretrained: true
+        type: global
       use_xyz: true
       canon_xyz: false
       use_code: true
@@ -101,13 +105,13 @@ lightning:
 
   trainer:
     benchmark: True
-    log_every_n_steps: 10
+    log_every_n_steps: 2 #10
     accumulate_grad_batches: 1
-    devices: 0,
-    accelerator: "gpu"
-    #limit_train_batches: 4
-    limit_val_batches: 10
-    limit_test_batches: 10
+    #devices: 0,
+    #accelerator: "gpu"
+    limit_train_batches: 1 #remove
+    limit_val_batches: 0 #10
+    limit_test_batches: 0 #10
     max_epochs: 500
 #    print_interval: 2
 #    save_interval: 50

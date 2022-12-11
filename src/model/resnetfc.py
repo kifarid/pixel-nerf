@@ -190,7 +190,7 @@ class ResnetFC(nn.Module):
             d_in,
             n_blocks=conf.get("n_blocks", 5),
             d_hidden=conf.get("d_hidden", 128),
-            d_out= conf.get("d_out", 128),
+            d_out=conf.get("d_out", 4),
             beta=conf.get("beta", 0.0),
             combine_layer=conf.get("combine_layer", 1000),
             combine_type=conf.get("combine_type", "average"),  # average | max

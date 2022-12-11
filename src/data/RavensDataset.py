@@ -70,7 +70,11 @@ class RDataset(torch.utils.data.Dataset):
 
         with tf.io.gfile.GFile(act_path, 'rb') as f:
             act = pickle.load(f)
-            act = action_dict_to_tensor(act)
+            # write an exception handling here
+            try:
+                act = action_dict_to_tensor(act)
+            except Exception as e:
+                raise Exception(f"action path was {act_path} with error {e}")
 
         if len(mask_paths) == 0:
             mask_paths = [None] * len(rgb_paths)

@@ -242,7 +242,7 @@ class ImageEncoder(nn.Module):
     @classmethod
     def from_conf(cls, conf):
         return cls(
-            conf.get_string("backbone"),
+            conf.get("backbone"),
             pretrained=conf.get("pretrained", True),
             latent_size=conf.get("latent_size", 128),
         )
@@ -451,22 +451,27 @@ class FieldEncoder(nn.Module):
 
         SB, B, _ = xyz.shape
         NS = self.num_views_per_obj
-        xyz = repeat_interleave(xyz, NS)  # (SB*NS, B, 3)
+        xyz_rep = repeat_interleave(xyz, NS)  # (SB*NS, B, 3)
         # Transform query points into the camera spaces of the input views
-        xyz_local = self.transform_to_local(xyz)
+        xyz_local = self.transform_to_local(xyz_rep)
         uv = self.transform_to_cam(xyz_local)
         latent = self.index(
             uv, None, self.image_shape
         )  # (SB * NS, latent, B)
+        # get another view of latent with num of objects and num of views per object
+        latent = latent.view(SB, NS, -1, B).mean(dim=1)  # (SB, latent, B)
+
         pointclouds = Pointclouds(
                 points=xyz, features=latent.permute(0, 2, 1).float())
         grid_max = int(self.grid.max())
+
         initial_volumes = Volumes(
             features=torch.zeros(latent.size(0), self.latent_size, *(grid_max, grid_max, grid_max)).float(),
             densities=torch.zeros(latent.size(0), 1, *(grid_max, grid_max, grid_max)).float(),
             volume_translation=-torch.from_numpy((self.end + self.start) / 2).float(),
             voxel_size=self.voxel_size,
         ).to(self.device)
+
         updated_volumes = add_pointclouds_to_volumes(
             pointclouds=pointclouds,
             initial_volumes=initial_volumes,

@@ -24,25 +24,28 @@ class BC(pl.LightningModule):
     # classic imitation learning policy
 
     def __init__(self,
-                 bc_config,
+                 model_config,
                  backbone_config,
                  scheduler_config=None,
                  ignore_keys=list(),
                  ckpt_path=None,
                  monitor=None,
+                 base_learning_rate=1e-4,
+                 train_backbone_steps=0,
                  ):
         super().__init__()
         self.save_hyperparameters()
+        self.train_backbone_steps = train_backbone_steps
         self.instantiate_backbone(backbone_config)
-        self.action_space = bc_config["action_space"]
+        self.action_space = model_config["action_space"]
         self.scheudler_config = scheduler_config
-        self.base_bc = make_mlp(bc_config, d_in=self.d_latent)
+        self.base_bc = make_mlp(model_config, d_in=self.backbone_model.net.d_latent)
         # .to(device=self.device)
         # create heads from action_space
         self.heads = nn.ModuleDict()
         for k, v in self.action_space.items():
             # create classification or regression one layer for each action in the action space
-            self.heads[k] = nn.Linear(self.base_bc.d_out, v["size"])
+            self.heads[k] = nn.Linear(model_config.d_out, v["size"])
 
         # create losses needed
         self.cross_entropy_loss = nn.CrossEntropyLoss()
@@ -53,8 +56,20 @@ class BC(pl.LightningModule):
         if ckpt_path is not None:
             self.init_from_ckpt(ckpt_path, ignore_keys=ignore_keys)
 
-        #self.train_acc = torchmetrics.Accuracy(task='multiclass')
-        #self.valid_acc = torchmetrics.Accuracy(task='multiclass')
+        if self.train_backbone_steps > 0:
+            print("automatic optimization is dead")
+            self.automatic_optimization = False
+        else:
+            self.kill_backbone_training()
+
+        #create torchmetrics accuracy for each discrete action
+        self.train_acc = {}
+        self.val_acc = {}
+        # for k, v in self.action_space.items():
+        #     if v["type"] == "discrete":
+        #         task = 'binary' if v["size"] == 2 else 'multiclass'
+        #         self.train_acc[k] = torchmetrics.Accuracy(task=task)
+        #         self.val_acc[k] = torchmetrics.Accuracy(task=task)
 
     def calc_losses(self, gt, preds):
 
@@ -63,62 +78,116 @@ class BC(pl.LightningModule):
             if v["type"] == "discrete":
                 loss_dict[k] = self.cross_entropy_loss(preds[k], gt[k])
             elif v["type"] == "continuous":
+
                 loss_dict[k] = self.mse_loss(preds[k], gt[k])
 
+        # get mean of the losses
+        loss = torch.mean(torch.stack(list(loss_dict.values())))
         # sum all losses in loss_dict
-        loss = sum(loss_dict.values())
+        #loss = sum(loss_dict.values())
         return loss, loss_dict
 
     def forward(self, data):
+
         x = self.get_input(data)
         x = self.base_bc(x)
         preds = {}
         for k, v in self.action_space.items():
             preds[k] = self.heads[k](x)
-        # bound preds by range of action space
-        for k, v in self.action_space.items():
+            # bound preds by range of action space
             if v["type"] == "continuous":
                 preds[k] = torch.clamp(preds[k], v["min"], v["max"])
 
         return preds
 
+    def train_backbone(self, data, batch_idx):
+        opt = self.backbone_model.optimizers()
+        opt.zero_grad()
+        loss = self.backbone_model.training_step(data, batch_idx)
+        self.backbone_model.manual_backward(loss)
+        opt.step()
+        return loss
+
     def training_step(self, data, batch_idx):
+        if self.train_backbone_steps > self.global_step:
+            print(f"at global step {self.global_step} and train backbone steps are {self.train_backbone_steps}")
+            backbone_loss = self.train_backbone(data, batch_idx)
+            self.log("backbone_loss", backbone_loss, on_step=True, on_epoch=True)
+        else:
+            self.kill_backbone_training()
+
         preds = self.forward(data)
         # calculate accuracy metrics for discrete predictions
-        for k, v in self.action_space.items():
-            if v["type"] == "discrete":
-                self.train_acc(preds[k], data[k])
+        # for k, v in self.action_space.items():
+        #     if v["type"] == "discrete":
+        #         self.train_acc[k](preds[k], data[k])
 
         loss, loss_dict = self.calc_losses(data["actions"], preds)
         # log loss and loss dict
-        self.log("train_loss", loss, on_step=True, on_epoch=True)
-        self.log("train_loss_dict", loss_dict, on_step=True, on_epoch=True)
-        #self.log('train_acc_epoch', self.train_acc.compute(), on_step=False, on_epoch=True)
+        self.log("bc_train_loss", loss, on_step=True, on_epoch=True)
+        self.log("bc_train_loss_dict", loss_dict, on_step=True, on_epoch=True)
+
+
+
+        # log accuracy metrics
+        # for k, v in self.action_space.items():
+        #     if v["type"] == "discrete":
+        #         self.log(f"train_acc_{k}", self.train_acc[k].compute(), on_step=False, on_epoch=True)
+
+        # check if automatic optimization is off and do backward pass manually
+        if self.automatic_optimization == False:
+            self.optimizers().zero_grad()
+            self.manual_backward(loss)
+            self.optimizers().step()
+
         return loss # return loss to be used by the optimizer
 
     def validation_step(self, data, batch_idx):
         self.base_bc.eval()
         self.heads.eval()
-        preds = self.forward(data)
-        loss, loss_dict = self.calc_losses(data, preds)
+        #self.backbone_model.eval()
+        with torch.no_grad():
+            preds = self.forward(data)
+            loss, loss_dict = self.calc_losses(data["actions"], preds)
+            # for k, v in self.action_space.items():
+            #     if v["type"] == "discrete":
+            #         self.val_acc[k](preds[k], data[k])
         # log loss and loss dict
-        self.log("val_loss", loss, on_step=True, on_epoch=True)
-        self.log("val_loss_dict", loss_dict, on_step=True, on_epoch=True)
+        self.log("bc_val_loss", loss, on_step=True, on_epoch=True)
+        self.log("bc_val_loss_dict", loss_dict, on_step=True, on_epoch=True)
+        # for k, v in self.action_space.items():
+        #     if v["type"] == "discrete":
+        #         self.log(f"train_acc_{k}", self.val_acc[k].compute(), on_step=False, on_epoch=True)
+        self.base_bc.train()
+        self.heads.train()
+        if self.train_backbone_steps > self.global_step:
+            print(f"at global step {self.global_step} and train backbone steps are {self.train_backbone_steps}")
+            self.backbone_model.train()
         return loss
 
     def test_step(self, data, batch_idx):
         self.base_bc.eval()
         self.heads.eval()
-        preds = self.forward(data)
-        loss, loss_dict = self.calc_losses(data, preds)
+        with torch.no_grad():
+            preds = self.forward(data)
+            loss, loss_dict = self.calc_losses(data["actions"], preds)
         # log loss and loss dict
-        self.log("test_loss", loss, on_step=True, on_epoch=True)
-        self.log("test_loss_dict", loss_dict, on_step=True, on_epoch=True)
+        self.log("bc_test_loss", loss, on_step=True, on_epoch=True)
+        self.log("bc_test_loss_dict", loss_dict, on_step=True, on_epoch=True)
+        self.base_bc.train()
+        self.heads.train()
+        if self.train_backbone_steps < self.global_step:
+            self.backbone_model.train()
         return loss
 
-    def instantiate_first_stage(self, config):
+    def instantiate_backbone(self, config):
         model = instantiate_from_config(config)
-        self.backbone_model = model.eval()
+        self.backbone_model = model
+        if self.train_backbone_steps == 0:
+            self.kill_backbone_training()
+
+    def kill_backbone_training(self):
+        self.backbone_model.eval()
         self.backbone_model.train = disabled_train
         for param in self.backbone_model.parameters():
             param.requires_grad = False
@@ -139,33 +208,31 @@ class BC(pl.LightningModule):
         Encode images using the backbone model.
         """
         with torch.no_grad():
-            self.backbone_model.encode(images, poses, focal, c=c)
+            self.backbone_model.net.encode(images, poses, focal, c=c)
             latent = self.backbone_model.get_latent()
         return latent
 
     def get_input(self, batch):
-        x = batch.to(self.device)
+        x = batch#.to(self.device)
         # x = x.float()#to(memory_format=torch.contiguous_format).float()
-        all_images = x["images"].float()  # .to(device=device)  # (SB, NV, 3, H, W)
 
+        all_images = x["images"].float()  # .to(device=device)  # (SB, NV, 3, H, W)
         SB, NV, _, H, W = all_images.shape
         all_poses = x["poses"].float()  # .to(device=device)  # (SB, NV, 4, 4)
         all_bboxes = x.get("bbox").float()  # (SB, NV, 4)  cmin rmin cmax rmax
         all_focals = x["focal"].float()  # (SB)
         all_c = x.get("c").float()  # (SB)
-        x = self.encode_backbone(all_images, all_poses, all_focals, c=all_c if all_c is not None else None)
-
+        with torch.no_grad():
+            x = self.encode_backbone(all_images, all_poses, all_focals, c=all_c if all_c is not None else None)
+        x = x.detach()
         return x
 
     def configure_optimizers(self):
         lr = self.learning_rate
-        params = list(self.model.parameters())
-        if self.backbone_trainable:
-            print(f"{self.__class__.__name__}: Also optimizing backbone params!")
-            params = params + list(self.backbone_model.parameters())
+        params = list(self.base_bc.parameters()) + list(self.heads.parameters())
 
         opt = torch.optim.AdamW(params, lr=lr)
-        if self.use_scheduler:
+        if self.scheudler_config is not None:
             assert 'target' in self.scheduler_config
             scheduler = instantiate_from_config(self.scheduler_config)
 
@@ -179,9 +246,9 @@ class BC(pl.LightningModule):
             return [opt], scheduler
         return opt
 
-    def training_epoch_end(self, outputs):
-        self.train_acc.reset()
+    # def training_epoch_end(self, outputs):
+    #     self.train_acc.reset()
 
-    def validation_epoch_end(self, outputs):
-        self.log('valid_acc_epoch', self.valid_acc.compute())
-        self.valid_acc.reset()
+    # def validation_epoch_end(self, outputs):
+    #     #self.log('valid_acc_epoch', self.valid_acc.compute())
+    #     self.valid_acc.reset()

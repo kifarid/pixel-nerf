@@ -24,6 +24,7 @@ model:
         type: resnet
         n_blocks: 5
         d_hidden: 512
+        d_out: 4
         # Combine after 3rd layer by average
         combine_layer: 3
         combine_type: average
@@ -31,6 +32,7 @@ model:
         type: resnet
         n_blocks: 5
         d_hidden: 512
+        d_out: 4
         combine_layer: 3
         combine_type: average
       nviews: 1

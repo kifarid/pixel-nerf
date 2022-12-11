@@ -23,7 +23,10 @@ class NeRFAE(pl.LightningModule):
         self.net.stop_encoder_grad = model_config.freeze_enc
         if model_config.freeze_enc:
             print("Encoder frozen")
-            self.net.encoder.eval()
+            if model_config.use_encoder:
+                self.net.encoder.eval()
+            if model_config.use_global_encoder:
+                self.net.global_encoder.eval()
 
         self.lambda_coarse = loss_config.get("lambda_coarse")
         self.lambda_fine = loss_config.get("lambda_fine", 1.0)
@@ -167,23 +170,29 @@ class NeRFAE(pl.LightningModule):
         loss_dict["loss"] = loss
         return loss_dict
 
+
+
     def training_step(self, data, batch_idx):
         loss_dict = self.calc_losses(data, is_train=True)
-        self.log("train_loss", loss_dict, on_step=True, on_epoch=True)
+        self.log("nerf_train_loss", loss_dict, on_step=True, on_epoch=True)
         return loss_dict
 
     def validation_step(self, data, batch_idx):
         self.renderer.eval()
+        self.net.eval()
         losses = self.calc_losses(data, is_train=False)
-        self.log("val_loss", losses, on_step=False, on_epoch=True)
+        self.log("nerf_val_loss", losses, on_step=False, on_epoch=True)
         self.renderer.train()
+        self.net.train()
         return losses
 
     def test_step(self, data, batch_idx):
         self.renderer.eval()
+        self.net.eval()
         losses = self.calc_losses(data, is_train=False)
-        self.log("val_loss", losses, on_step=False, on_epoch=True)
+        self.log("nerf_test_loss", losses, on_step=False, on_epoch=True)
         self.renderer.train()
+        self.net.train()
         return losses
 
     def log_images(self, data, idx=None, **kwargs):
@@ -294,7 +303,6 @@ class NeRFAE(pl.LightningModule):
             rgb_psnr = rgb_coarse_np
 
         psnr = util.psnr(rgb_psnr, gt)
-        print("psnr", psnr)
         self.log("psnr", psnr, on_step=False, on_epoch=True)
         # set the renderer network back to train mode
         self.renderer.train()
@@ -321,6 +329,9 @@ class NeRFAE(pl.LightningModule):
             x = x[..., None]
         x = x.permute(0, 3, 1, 2).to(memory_format=torch.contiguous_format).float()
         return x
+
+    def get_latent(self):
+        return self.net.get_latent()
 
     def configure_optimizers(self):
 

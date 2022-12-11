@@ -19,9 +19,10 @@ class PixelNeRFNet(torch.nn.Module):
         :param conf PyHocon config subtree 'model'
         """
         super().__init__()
-        self.encoder = make_encoder(conf["encoder"])
-        self.encoder_type = conf.encoder.get("type", "spatial")
-        self.use_encoder = conf.get("use_encoder", True)  # Image features?
+        self.use_encoder = conf.get("use_encoder", True)
+        if self.use_encoder:
+            self.encoder = make_encoder(conf["encoder"])
+            self.encoder_type = conf.encoder.get("type", "spatial")
 
         self.use_xyz = conf.get("use_xyz", False)
 
@@ -68,19 +69,19 @@ class PixelNeRFNet(torch.nn.Module):
             self.global_latent_size = self.global_encoder.latent_size
             d_latent += self.global_latent_size
 
-        d_out = 4
+        self.encoder_latent_size = self.encoder.latent_size if self.use_encoder else 0
+        self.global_encoder_latent_size = self.global_encoder.latent_size if self.use_global_encoder else 0
 
-        self.latent_size = self.encoder.latent_size
-        self.mlp_coarse = make_mlp(conf["mlp_coarse"], d_in, d_latent, d_out=d_out)
+        self.mlp_coarse = make_mlp(conf["mlp_coarse"], d_in, d_latent)
         self.mlp_fine = make_mlp(
-            conf["mlp_fine"], d_in, d_latent, d_out=d_out, allow_empty=True
+            conf["mlp_fine"], d_in, d_latent, allow_empty=True
         )
         # Note: this is world -> camera, and bottom row is omitted
         self.register_buffer("poses", torch.empty(1, 3, 4), persistent=False)
         self.register_buffer("image_shape", torch.empty(2), persistent=False)
 
         self.d_in = d_in
-        self.d_out = d_out
+        self.d_out = self.mlp_coarse.d_out
         self.d_latent = d_latent
         self.register_buffer("focal", torch.empty(1, 2), persistent=False)
         # Principal point
@@ -185,18 +186,26 @@ class PixelNeRFNet(torch.nn.Module):
         global_latent, latent = None, None
         if self.use_encoder:
             latent = self.encoder.latent
+            if latent.size(0) != self.num_objs:
+                latent = latent.view(self.num_objs, self.num_views_per_obj, *latent.shape[1:])
+                latent = latent.mean(dim=1)
             if len(latent.size()) > 2:
-                rem = tuple(range(1, len(latent.size())-1))
-                print(rem)
+                rem = tuple(range(2, len(latent.size())))
                 latent = latent.mean(dim=rem)
         if self.use_global_encoder:
             global_latent = self.global_encoder.latent
-        out = None
+            if global_latent.size(0) != self.num_objs:
+                rem_sz = global_latent.shape[1:]
+                global_latent = global_latent.view(self.num_objs, self.num_views_per_obj, *rem_sz)
+                global_latent = global_latent.mean(dim=1)
+
         if self.use_global_encoder and self.use_encoder:
             out = torch.cat((latent, global_latent), dim=-1)
         else:
             out = latent if self.use_encoder else global_latent
 
+        if self.stop_encoder_grad:
+            out = out.detach()
         return out
 
     def forward(self, xyz, coarse=True, viewdirs=None, far=False):
@@ -265,7 +274,7 @@ class PixelNeRFNet(torch.nn.Module):
                 if self.stop_encoder_grad:
                     latent = latent.detach()
                 latent = latent.transpose(1, 2).reshape(
-                    -1, self.latent_size
+                    -1, self.encoder_latent_size
                 )  # (SB * NS * B, latent)
 
                 if self.d_in == 0:
@@ -277,6 +286,10 @@ class PixelNeRFNet(torch.nn.Module):
             if self.use_global_encoder:
                 # Concat global latent code if enabled
                 global_latent = self.global_encoder.latent
+
+                if self.stop_encoder_grad:
+                    global_latent = global_latent.detach()
+
                 assert mlp_input.shape[0] % global_latent.shape[0] == 0
                 num_repeats = mlp_input.shape[0] // global_latent.shape[0]
                 global_latent = repeat_interleave(global_latent, num_repeats)
