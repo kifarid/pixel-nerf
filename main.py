@@ -197,9 +197,9 @@ class DataModuleFromConfig(pl.LightningDataModule):
         else:
             init_fn = None
         return DataLoader(self.datasets["train"], batch_size=self.batch_size,
-                          #num_workers=self.num_workers,
+                          num_workers=self.num_workers,
                           shuffle=False if is_iterable_dataset else True,
-                          #worker_init_fn=init_fn
+                          worker_init_fn=init_fn
                           )
 
     def _val_dataloader(self, shuffle=False):
@@ -209,8 +209,8 @@ class DataModuleFromConfig(pl.LightningDataModule):
             init_fn = None
         return DataLoader(self.datasets["validation"],
                           batch_size=self.batch_size,
-                          #num_workers=self.num_workers//2,
-                          #worker_init_fn=init_fn,
+                          num_workers=self.num_workers//2,
+                          worker_init_fn=init_fn,
                           shuffle=shuffle)
 
     def _test_dataloader(self, shuffle=False):
