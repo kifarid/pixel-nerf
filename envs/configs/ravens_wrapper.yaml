@@ -1,0 +1,18 @@
+wrapper:
+  _target_: ravens_envs.RavensWrapper
+  env:
+    _target_: ravens_envs.ContinuousEnvironment
+    assets_root: 'ravens/ravens/environments/assets'
+    disp: true
+    shared_memory: false
+    use_egl: false
+    hz: 480
+
+
+  task:
+    _target_: ravens.tasks.block_insertion.BlockInsertion
+    continuous: true
+
+  image_size: [120, 160]
+  world_scale: 1.0
+  coord_trans: [1, -1, -1, 1]
