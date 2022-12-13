@@ -1,4 +1,5 @@
 import cv2
+import pybullet as p
 import numpy as np
 import torch
 from torchvision import transforms
@@ -9,6 +10,13 @@ import functools
 import math
 import warnings
 import importlib
+
+import os
+from pathlib import Path
+import re
+import subprocess
+import time
+from typing import Union
 
 
 def image_float_to_uint8(img):
@@ -80,6 +88,20 @@ def get_mask_to_tensor():
     return transforms.Compose(
         [transforms.ToTensor(), transforms.Normalize((0.0,), (1.0,))]
     )
+
+
+
+def pose_from_config(config):
+    """Converts a config dict to a pose matrix."""
+    rotation = p.getMatrixFromQuaternion(config['rotation'])
+    rotm = np.float32(rotation).reshape(3, 3)
+    position = np.float32(config['position'])
+    pose = np.eye(4, dtype=np.float32)
+    pose[:3, :3] = rotm #*np.array([1., -1., -1.]) to convert to openGL
+    pose[:3, 3] = position
+    return pose
+
+
 
 #TODO(Karim) make generic no matter what is the type of the space
 def action_dict_to_tensor(action):
@@ -576,3 +598,33 @@ def instantiate_from_config(config):
         raise KeyError("Expected key `target` to instantiate.")
     return get_obj_from_str(config["target"])(**config.get("params", dict()))
 
+class EglDeviceNotFoundError(Exception):
+    """Raised when EGL device cannot be found"""
+
+def get_egl_device_id(cuda_id: int) -> Union[int]:
+    """
+    >>> i = get_egl_device_id(0)
+    >>> isinstance(i, int)
+    True
+    """
+    assert isinstance(cuda_id, int), "cuda_id has to be integer"
+    dir_path = Path(__file__).absolute().parents[2] / "egl_check"
+    if not os.path.isfile(dir_path / "EGL_options.o"):
+        if os.environ.get("LOCAL_RANK", "0") == "0":
+            print("Building EGL_options.o")
+            subprocess.call(["bash", "build.sh"], cwd=dir_path)
+        else:
+            # In case EGL_options.o has to be built and multiprocessing is used, give rank 0 process time to build
+            time.sleep(5)
+    result = subprocess.run(["./EGL_options.o"], capture_output=True, cwd=dir_path)
+    n = int(result.stderr.decode("utf-8").split(" of ")[1].split(".")[0])
+    for egl_id in range(n):
+        my_env = os.environ.copy()
+        my_env["EGL_VISIBLE_DEVICE"] = str(egl_id)
+        result = subprocess.run(["./EGL_options.o"], capture_output=True, cwd=dir_path, env=my_env)
+        match = re.search(r"CUDA_DEVICE=[0-9]+", result.stdout.decode("utf-8"))
+        if match:
+            current_cuda_id = int(match[0].split("=")[1])
+            if cuda_id == current_cuda_id:
+                return egl_id
+    raise EglDeviceNotFoundError

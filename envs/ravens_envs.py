@@ -28,7 +28,7 @@ from typing import Dict, Tuple, List, Optional, Union, Any
 from ravens.tasks.grippers import Spatula
 from ravens.utils import pybullet_utils
 from ravens.utils import utils
-from env_utils import pose_from_config
+from src.util.util import pose_from_config
 
 from src.util.util import get_image_to_tensor_balanced, get_mask_to_tensor, action_dict_to_tensor
 
@@ -689,9 +689,6 @@ class RavensWrapper(gym.Wrapper):
         # Preprocess the observation.
         obs_preprocessed = defaultdict(list)
         # TODO(karim): add intrinsics per image
-        if configs is not None:
-            focal = configs[0]["intrinsics"][0]
-            cx, cy = (configs[0]["intrinsics"][2], configs[0]["intrinsics"][5])
 
         for view in range(len(obs["color"])):
             #loop through all the views
@@ -701,7 +698,7 @@ class RavensWrapper(gym.Wrapper):
             mask_tensor = self.mask_to_tensor(mask)
             obs_preprocessed["masks"].append(mask_tensor)
             bbox = self.get_bbox(mask)
-            obs_preprocessed["bboxes"].append(bbox)
+            obs_preprocessed["bbox"].append(bbox)
             if configs is not None:
                 pose = pose_from_config(configs[view])
                 #convert pose to tensor
@@ -722,7 +719,7 @@ class RavensWrapper(gym.Wrapper):
             scale = self.image_size[0] / obs_preprocessed["images"].shape[-2]
             obs_preprocessed["focal"] *= scale
             obs_preprocessed["c"] *= scale
-            obs_preprocessed["bboxes"] *= scale
+            obs_preprocessed["bbox"] *= scale
 
             obs_preprocessed["images"] = F.interpolate(obs_preprocessed["images"], size=self.image_size, mode="area")
             obs_preprocessed["masks"] = F.interpolate(obs_preprocessed["masks"], size=self.image_size, mode="area")
@@ -731,7 +728,13 @@ class RavensWrapper(gym.Wrapper):
             obs_preprocessed["focal"] *= self.world_scale
             obs_preprocessed["poses"][:, :3, 3] *= self.world_scale
 
+        obs_preprocessed = self.add_batch_dim(obs_preprocessed)
         return obs_preprocessed
+
+    def add_batch_dim(self, obs):
+        for key in obs.keys():
+            obs[key] = obs[key].unsqueeze(0)
+        return obs
 
     def process_action(self, action):
         action_processed = {}
@@ -740,19 +743,29 @@ class RavensWrapper(gym.Wrapper):
             if isinstance(self.env.action_space[key], gym.spaces.Tuple):
                 # get len of action space if tuple
                 len_space = len(self.env.action_space[key])
-                action_processed[key] = tuple([action[f"{key}_{str(i)}"] for i in range(len_space)])
+                # check if action is discrete get max value
+                action_processed[key] = tuple([action[f"{key}_{str(i)}"].squeeze().detach().cpu().numpy() for i in range(len_space)])
             else:
-                action_processed[key] = action[key]
+                action_processed[key] = action[key].squeeze().detach().cpu().numpy()
+        #convert actions from tensor to numpy
         return action_processed
 
     def step(self, action):
         #preprocess action
         action = self.process_action(action)
+        #print(action, "action is after processing")
         obs, reward, done, info = self.env.step(action)
         # process obs
         obs = self.preprocess_obs(obs, info["cam_configs"])
         return obs, reward, done, info
 
+    def get_info(self):
+        return self.env.info
+
+    def set_task(self, task=None):
+        if task is not None:
+            self.task = task
+        self.env.set_task(self.task)
 
 if __name__ == '__main__':
     # assets_root = 'ravens/ravens/environments/assets'

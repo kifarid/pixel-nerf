@@ -100,6 +100,15 @@ class BC(pl.LightningModule):
 
         return preds
 
+    def step(self, data):
+        pred = self.forward(data)
+        for k, v in self.action_space.items():
+            #check if discrete then return max index along last dim
+            if v["type"] == "discrete":
+                pred[k] = torch.argmax(pred[k], dim=-1)
+
+        return pred
+
     def train_backbone(self, data, batch_idx):
         opt = self.backbone_model.optimizers()
         opt.zero_grad()

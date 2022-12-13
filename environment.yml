@@ -25,8 +25,12 @@ dependencies:
       - lpips
       - tensorflow
       - wandb
+      - hydra-core
       - omegaconf
       - pytorch-lightning
+      - pybullet
+      - moviepy
+      - imageio
   
   - scipy
   - numpy
