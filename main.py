@@ -224,7 +224,7 @@ class DataModuleFromConfig(pl.LightningDataModule):
         shuffle = shuffle and (not is_iterable_dataset)
 
         return DataLoader(self.datasets["test"], batch_size=self.batch_size,
-                          #num_workers=self.num_workers//2, worker_init_fn=init_fn,
+                          num_workers=self.num_workers//2, worker_init_fn=init_fn,
                           shuffle=shuffle)
 
     def _predict_dataloader(self, shuffle=False):
@@ -659,15 +659,15 @@ if __name__ == "__main__":
                     "lightning_config": lightning_config,
                 }
             },
-            "image_logger": {
-                "target": "main.ImageLogger",
-                "params": {
-                    "batch_frequency": 100,
-                    "batch_frequency_val": 1,
-                    "max_images": 4,
-                    "clamp": True
-                }
-            },
+            # "image_logger": {
+            #     "target": "main.ImageLogger",
+            #     "params": {
+            #         "batch_frequency": 100,
+            #         "batch_frequency_val": 1,
+            #         "max_images": 4,
+            #         "clamp": True
+            #     }
+            # },
             "learning_rate_logger": {
                 "target": "main.LearningRateMonitor",
                 "params": {

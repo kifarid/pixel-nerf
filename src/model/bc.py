@@ -9,6 +9,7 @@ import torch.nn as nn
 import numpy as np
 import pytorch_lightning as pl
 from torch.optim.lr_scheduler import LambdaLR
+from contextlib import nullcontext
 
 from src.util import instantiate_from_config
 from src.model.model_util import make_mlp
@@ -31,11 +32,13 @@ class BC(pl.LightningModule):
                  ckpt_path=None,
                  monitor=None,
                  base_learning_rate=1e-4,
+                 train_backbone_bc_obj=False,
                  train_backbone_steps=0,
                  ):
         super().__init__()
         self.save_hyperparameters()
         self.train_backbone_steps = train_backbone_steps
+        self.train_backbone_bc_obj = train_backbone_bc_obj
         self.instantiate_backbone(backbone_config)
         self.action_space = model_config["action_space"]
         self.scheudler_config = scheduler_config
@@ -59,10 +62,13 @@ class BC(pl.LightningModule):
         if self.train_backbone_steps > 0:
             print("automatic optimization is dead")
             self.automatic_optimization = False
-        else:
+            self.backbone_model.automatic_optimization = False
+
+        if self.no_grad_cond:#not self.train_backbone_bc_obj and self.train_backbone_steps <= 0:
+            print("killing the gradient for the backbone")
             self.kill_backbone_training()
 
-        #create torchmetrics accuracy for each discrete action
+        # create torchmetrics accuracy for each discrete action
         self.train_acc = {}
         self.val_acc = {}
         # for k, v in self.action_space.items():
@@ -101,11 +107,12 @@ class BC(pl.LightningModule):
         return preds
 
     def step(self, data):
-        pred = self.forward(data)
-        for k, v in self.action_space.items():
-            #check if discrete then return max index along last dim
-            if v["type"] == "discrete":
-                pred[k] = torch.argmax(pred[k], dim=-1)
+        with torch.no_grad():
+            pred = self.forward(data)
+            for k, v in self.action_space.items():
+                #check if discrete then return max index along last dim
+                if v["type"] == "discrete":
+                    pred[k] = torch.argmax(pred[k], dim=-1)
 
         return pred
 
@@ -113,16 +120,16 @@ class BC(pl.LightningModule):
         opt = self.backbone_model.optimizers()
         opt.zero_grad()
         loss = self.backbone_model.training_step(data, batch_idx)
-        self.backbone_model.manual_backward(loss)
+        self.backbone_model.manual_backward(loss["loss"])
         opt.step()
         return loss
 
     def training_step(self, data, batch_idx):
         if self.train_backbone_steps > self.global_step:
-            print(f"at global step {self.global_step} and train backbone steps are {self.train_backbone_steps}")
             backbone_loss = self.train_backbone(data, batch_idx)
             self.log("backbone_loss", backbone_loss, on_step=True, on_epoch=True)
-        else:
+
+        if self.no_grad_cond:
             self.kill_backbone_training()
 
         preds = self.forward(data)
@@ -144,7 +151,7 @@ class BC(pl.LightningModule):
         #         self.log(f"train_acc_{k}", self.train_acc[k].compute(), on_step=False, on_epoch=True)
 
         # check if automatic optimization is off and do backward pass manually
-        if self.automatic_optimization == False:
+        if not self.automatic_optimization:
             self.optimizers().zero_grad()
             self.manual_backward(loss)
             self.optimizers().step()
@@ -154,7 +161,7 @@ class BC(pl.LightningModule):
     def validation_step(self, data, batch_idx):
         self.base_bc.eval()
         self.heads.eval()
-        #self.backbone_model.eval()
+        self.backbone_model.eval()
         with torch.no_grad():
             preds = self.forward(data)
             loss, loss_dict = self.calc_losses(data["actions"], preds)
@@ -169,14 +176,15 @@ class BC(pl.LightningModule):
         #         self.log(f"train_acc_{k}", self.val_acc[k].compute(), on_step=False, on_epoch=True)
         self.base_bc.train()
         self.heads.train()
-        if self.train_backbone_steps > self.global_step:
-            print(f"at global step {self.global_step} and train backbone steps are {self.train_backbone_steps}")
+        self.backbone_model.eval()
+        if not self.no_grad_cond: #(self.train_backbone_steps > self.global_step) or self.train_backbone_bc_obj:
             self.backbone_model.train()
         return loss
 
     def test_step(self, data, batch_idx):
         self.base_bc.eval()
         self.heads.eval()
+        self.backbone_model.eval()
         with torch.no_grad():
             preds = self.forward(data)
             loss, loss_dict = self.calc_losses(data["actions"], preds)
@@ -185,14 +193,14 @@ class BC(pl.LightningModule):
         self.log("bc_test_loss_dict", loss_dict, on_step=True, on_epoch=True)
         self.base_bc.train()
         self.heads.train()
-        if self.train_backbone_steps < self.global_step:
+        if not self.no_grad_cond:
             self.backbone_model.train()
         return loss
 
     def instantiate_backbone(self, config):
         model = instantiate_from_config(config)
         self.backbone_model = model
-        if self.train_backbone_steps == 0:
+        if self.no_grad_cond: #(not self.train_backbone_bc_obj) and self.train_backbone_steps <= 0:
             self.kill_backbone_training()
 
     def kill_backbone_training(self):
@@ -216,9 +224,10 @@ class BC(pl.LightningModule):
         """
         Encode images using the backbone model.
         """
-        with torch.no_grad():
-            self.backbone_model.net.encode(images, poses, focal, c=c)
-            latent = self.backbone_model.get_latent()
+
+        #with torch.no_grad():
+        self.backbone_model.encode(images, poses, focal, c=c)
+        latent = self.backbone_model.get_latent()
         return latent
 
     def get_input(self, batch):
@@ -231,10 +240,17 @@ class BC(pl.LightningModule):
         all_bboxes = x.get("bbox").float()  # (SB, NV, 4)  cmin rmin cmax rmax
         all_focals = x["focal"].float()  # (SB)
         all_c = x.get("c").float()  # (SB)
-        with torch.no_grad():
+
+        with torch.no_grad() if not self.train_backbone_bc_obj else nullcontext():
             x = self.encode_backbone(all_images, all_poses, all_focals, c=all_c if all_c is not None else None)
-        x = x.detach()
+
+        if self.no_grad_cond:
+            x = x.detach()
         return x
+
+    @property
+    def no_grad_cond(self):
+        return (self.train_backbone_steps <= self.global_step) and (not self.train_backbone_bc_obj)
 
     def configure_optimizers(self):
         lr = self.learning_rate

@@ -47,7 +47,7 @@ model:
           gamma: 1.0
           base_learning_rate: 1e-4
           use_encoder: false
-          freeze_enc: true
+          freeze_enc: false
           use_global_encoder: true
           global_encoder:
             backbone: resnet34
@@ -93,7 +93,7 @@ model:
             init_epoch: 5
           lambda_coarse: 1.0
           lambda_fine: 1.0
-
+    train_backbone_bc_obj: true
 data:
   target: main.DataModuleFromConfig
   params:

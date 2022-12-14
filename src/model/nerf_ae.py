@@ -16,9 +16,11 @@ class NeRFAE(pl.LightningModule):
                  ckpt_path=None,
                  ignore_keys=[],
                  monitor=None,
+                 logging=True,
                  ):
         super().__init__()
         self.save_hyperparameters()
+        self.logging = logging
         self.net = make_model(model_config)  # .to(device=self.device)
         self.net.stop_encoder_grad = model_config.freeze_enc
         if model_config.freeze_enc:
@@ -170,18 +172,18 @@ class NeRFAE(pl.LightningModule):
         loss_dict["loss"] = loss
         return loss_dict
 
-
-
     def training_step(self, data, batch_idx):
         loss_dict = self.calc_losses(data, is_train=True)
-        self.log("nerf_train_loss", loss_dict, on_step=True, on_epoch=True)
+        if self.logging:
+            self.log("nerf_train_loss", loss_dict, on_step=True, on_epoch=True)
         return loss_dict
 
     def validation_step(self, data, batch_idx):
         self.renderer.eval()
         self.net.eval()
         losses = self.calc_losses(data, is_train=False)
-        self.log("nerf_val_loss", losses, on_step=False, on_epoch=True)
+        if self.logging:
+            self.log("nerf_val_loss", losses, on_step=False, on_epoch=True)
         self.renderer.train()
         self.net.train()
         return losses
@@ -190,7 +192,8 @@ class NeRFAE(pl.LightningModule):
         self.renderer.eval()
         self.net.eval()
         losses = self.calc_losses(data, is_train=False)
-        self.log("nerf_test_loss", losses, on_step=False, on_epoch=True)
+        if self.logging:
+            self.log("nerf_test_loss", losses, on_step=False, on_epoch=True)
         self.renderer.train()
         self.net.train()
         return losses
@@ -332,6 +335,9 @@ class NeRFAE(pl.LightningModule):
 
     def get_latent(self):
         return self.net.get_latent()
+
+    def encode(self, images, poses, focal, c=None):
+        return self.net.encode(images, poses, focal, c=c)
 
     def configure_optimizers(self):
 

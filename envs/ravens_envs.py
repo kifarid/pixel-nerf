@@ -676,12 +676,19 @@ class RavensWrapper(gym.Wrapper):
         cols = np.any(mask, axis=0)
         rnz = np.where(rows)[0]
         cnz = np.where(cols)[0]
+
+
         if len(rnz) == 0:
-            raise RuntimeError(
-                "ERROR: Bad image please investigate!"
+            #raise RuntimeError(
+            print(
+                "Bad image please investigate!"
             )
-        rmin, rmax = rnz[[0, -1]]
-        cmin, cmax = cnz[[0, -1]]
+
+        #if rnz is empty, then return the number of rows in mask
+
+
+        rmin, rmax = rnz[[0, -1]] if len(rnz) != 0 else (0, mask.shape[0])
+        cmin, cmax = cnz[[0, -1]]  if len(rnz) != 0 else (0, mask.shape[1])
         bbox = torch.tensor([cmin, rmin, cmax, rmax], dtype=torch.float32)
         return bbox
 
