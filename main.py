@@ -345,14 +345,13 @@ class ImageLogger(Callback):
 
     def log_img(self, pl_module, batch, batch_idx, split="train"):
         check_idx = batch_idx if self.log_on_batch_idx else pl_module.global_step
-        print(f"should log image {check_idx}")
+        #print(f"should log image {check_idx}")
         if (self.check_frequency(check_idx, split) and
                 hasattr(pl_module, "log_images") and
                 callable(pl_module.log_images) and
                 self.max_images > 0):
             logger = type(pl_module.logger)
-            print(f"logger is {logger}")
-
+            
             is_train = pl_module.training
             if is_train:
                 pl_module.eval()
@@ -390,8 +389,8 @@ class ImageLogger(Callback):
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         if not self.disabled and (pl_module.global_step > 0 or self.log_first_step):
-            pass
-            #self.log_img(pl_module, batch, batch_idx, split="train")
+            #pass
+            self.log_img(pl_module, batch, batch_idx, split="train")
 
     def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
         if not self.disabled and pl_module.global_step > 0:

@@ -17,7 +17,7 @@ model:
       gamma: 1.0
       base_learning_rate: 1e-4
       use_encoder: false
-      freeze_enc: false
+      freeze_enc: true
       use_global_encoder: true
       global_encoder:
         backbone: resnet34
@@ -47,7 +47,7 @@ model:
         d_out: 4
         combine_layer: 3
         combine_type: average
-      nviews: '2'
+      nviews: '1'
       encoder:
         backbone: resnet34
         pretrained: true
@@ -81,7 +81,7 @@ data:
     validation:
       target: src.data.RavensDataset.RDataset
       params:
-        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion  #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         stage: val
         views_per_scene: 3
         z_near: 0.01
@@ -107,8 +107,7 @@ lightning:
         batch_frequency_val: 10
         max_images: 1
         clamp: true
-
-
+        
   logger:
     params:
       entity: kifarid
@@ -120,7 +119,7 @@ lightning:
     accumulate_grad_batches: 1
     devices: 0,
     accelerator: "gpu"
-    #limit_train_batches: 1 #remove
+    # limit_train_batches: 1 #remove
     # limit_val_batches: 0 #10
     # limit_test_batches: 0 #10
     max_epochs: 500

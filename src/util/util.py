@@ -258,15 +258,15 @@ def bbox_sample(bboxes, num_pix):
     """
     :return (num_pix, 3)
     """
-    image_ids = torch.randint(0, bboxes.shape[0], (num_pix,))
+    image_ids = torch.randint(0, bboxes.shape[0], (num_pix,)).to(bboxes.device)
     pix_bboxes = bboxes[image_ids].long()
     #print(pix_bboxes, 'pix bboxes')
     x = (
-        torch.rand(num_pix) * (pix_bboxes[:, 2] + 0.9 - pix_bboxes[:, 0])
+        torch.rand(num_pix).to(bboxes.device) * (pix_bboxes[:, 2] + 0.9 - pix_bboxes[:, 0])
         + pix_bboxes[:, 0]
     ).long()
     y = (
-        torch.rand(num_pix) * (pix_bboxes[:, 3] + 0.9 - pix_bboxes[:, 1])
+        torch.rand(num_pix).to(bboxes.device) * (pix_bboxes[:, 3] + 0.9 - pix_bboxes[:, 1])
         + pix_bboxes[:, 1]
     ).long()
 

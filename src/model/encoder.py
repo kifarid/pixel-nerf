@@ -266,7 +266,8 @@ class FieldEncoder(nn.Module):
         norm_type="batch",
         start=np.array([0., 0., 0.]),
         end=np.array([1., 1., 1.]),
-        voxel_size=0.01
+        voxel_size=0.01, 
+        pnts_per_voxel=5
 
     ):
         """
@@ -312,7 +313,9 @@ class FieldEncoder(nn.Module):
         self.start = start
         self.end = end
         self.voxel_size = voxel_size
+        self.pnts_per_voxel = pnts_per_voxel
         self.grid = (self.end-self.start)//self.voxel_size
+        self.grid = np.ceil(self.grid / 2) * 2
         grid_max = int(self.grid.max())
         self.vol_encoder = VolEncoder((self.latent_size, grid_max, grid_max, grid_max), d_latent = self.latent_size)
         self.num_layers = num_layers
@@ -475,7 +478,7 @@ class FieldEncoder(nn.Module):
         updated_volumes = add_pointclouds_to_volumes(
             pointclouds=pointclouds,
             initial_volumes=initial_volumes,
-            mode="trilinear",
+            mode="nearest", #"trilinear"
         )
         vol_feats = updated_volumes.features()
         vol_feats = vol_feats.permute(0, 1, 4, 3, 2)
@@ -484,7 +487,7 @@ class FieldEncoder(nn.Module):
     def get_pnts(self):
         dim_grid = []
         for s, e in zip(self.start, self.end):
-            dim_grid.append(torch.linspace(start=s, end=e, steps=int((e - s) / self.voxel_size)))
+            dim_grid.append(torch.linspace(start=s, end=e, steps=int(self.pnts_per_voxel*(e - s) / self.voxel_size)))
         dim_grid = torch.meshgrid(dim_grid)
         dim_grid = torch.stack(dim_grid, dim=-1).flatten(end_dim=-2)
 
@@ -497,6 +500,7 @@ class FieldEncoder(nn.Module):
             pretrained=conf.get("pretrained", True),
             num_layers=conf.get("num_layers", 4),
             voxel_size= conf.get("voxel_size", 0.03125),
+            pnts_per_voxel = conf.get("pnts_per_voxel", 5),
             start=np.array(conf.get("start", [0., 0., 0.])),
             end=np.array(conf.get("end", [1., 1., 1.])),
             index_interp=conf.get("index_interp", "bilinear"),

@@ -311,7 +311,6 @@ class NeRFAE(pl.LightningModule):
         self.renderer.train()
 
         vis_t=torch.from_numpy(vis).unsqueeze(0).permute(0, 3, 1, 2)
-        print("vis tshape", vis_t.shape)
         vis_dict = {"images": vis_t}
         return vis_dict
 

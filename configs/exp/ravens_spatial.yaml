@@ -4,7 +4,7 @@ model:
 
     renderer_config:
       white_bkgd: false
-      no_bbox_step: 0
+      no_bbox_step: 10000
       bound_floor: false
       z_far: ${data.params.train.params.z_far}
       z_near: ${data.params.train.params.z_near}
@@ -17,7 +17,7 @@ model:
       gamma: 1.0
       base_learning_rate: 1e-4
       use_encoder: true
-      freeze_enc: true #false
+      freeze_enc: false #false
       use_global_encoder: false
       use_xyz: true
       canon_xyz: false
@@ -43,7 +43,7 @@ model:
         d_out: 4
         combine_layer: 3
         combine_type: average
-      nviews: '1'
+      nviews: '2'
       encoder:
         backbone: resnet34
         pretrained: true
@@ -68,7 +68,7 @@ data:
     train:
       target: src.data.RavensDataset.RDataset
       params:
-        path:  data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        path:  /work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion
         stage: train
         views_per_scene: 3
         z_near: 0.01
@@ -77,7 +77,7 @@ data:
     validation:
       target: src.data.RavensDataset.RDataset
       params:
-        path: data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion
         stage: val
         views_per_scene: 3
         z_near: 0.01
@@ -86,7 +86,7 @@ data:
     test:
       target: src.data.RavensDataset.RDataset
       params:
-        path: data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion
         stage: test
         views_per_scene: 3
         z_near: 0.01
@@ -94,6 +94,16 @@ data:
 
 
 lightning:
+
+  callbacks:
+    image_logger:
+      target: main.ImageLogger
+      params:
+        batch_frequency: 100
+        batch_frequency_val: 10
+        max_images: 1
+        clamp: true
+        
   logger:
     params:
       entity: kifarid
@@ -101,13 +111,13 @@ lightning:
 
   trainer:
     benchmark: True
-    log_every_n_steps: 10
+    log_every_n_steps: 4
     accumulate_grad_batches: 1
     devices: 0,
     accelerator: "gpu"
     #limit_train_batches: 4
-    limit_val_batches: 10
-    limit_test_batches: 10
+    # limit_val_batches: 10
+    # limit_test_batches: 10
     max_epochs: 500
 #    print_interval: 2
 #    save_interval: 50
