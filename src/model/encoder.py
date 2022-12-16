@@ -11,6 +11,7 @@ from model.vol_encoder import VolEncoder
 import torch.autograd.profiler as profiler
 import numpy as np
 from util import repeat_interleave
+#from model.model_util import make_mlp
 
 from pytorch3d.structures import Volumes, Pointclouds
 from pytorch3d.ops import add_pointclouds_to_volumes
@@ -189,7 +190,7 @@ class ImageEncoder(nn.Module):
     Global image encoder
     """
 
-    def __init__(self, backbone="resnet34", pretrained=True, latent_size=128):
+    def __init__(self, backbone="resnet34", pretrained=True, latent_size=128, encode_cam=True):
         """
         :param backbone Backbone network. Assumes it is resnet*
         e.g. resnet34 | resnet50
@@ -204,6 +205,24 @@ class ImageEncoder(nn.Module):
         self.latent_size = latent_size
         if latent_size != 512:
             self.fc = nn.Linear(512, latent_size)
+
+
+        self.poses = None
+        self.c = None
+        self.focal = None
+        self.num_views_per_object = None
+        self.num_objs = None
+        self.encode_cam = encode_cam
+
+        # create mlp to process the output and camera parameters (pose, focal length, c)
+        if self.encode_cam:
+
+            self.g_mlp = nn.Sequential(
+                nn.Linear(12+2+2 + latent_size, 128),
+                nn.ReLU(),
+                *[nn.Sequential(nn.Linear(128, 128), nn.ReLU()) for _ in range(1)],
+                nn.Linear(128, latent_size)
+            )
 
     def index(self, uv, cam_z=None, image_size=(), z_bounds=()):
         """
@@ -237,6 +256,18 @@ class ImageEncoder(nn.Module):
             x = self.fc(x)
 
         self.latent = x  # (B, latent_size)
+
+        # process the output and camera parameters (pose, focal length, c) using g_mlp
+        if self.poses is not None and self.encode_cam:
+            # poses (SB*NS, 12)
+            # c (SB, 2)
+            # focal (SB, 2)
+            f = repeat_interleave(self.focal,
+                                  self.num_views_per_obj)
+            c = repeat_interleave(self.c, self.num_views_per_obj)
+            x = self.g_mlp(torch.cat([x, self.poses.flatten(1, -1), f, c], dim=-1))
+            self.latent = x
+
         return self.latent
 
     @classmethod
@@ -245,6 +276,7 @@ class ImageEncoder(nn.Module):
             conf.get("backbone"),
             pretrained=conf.get("pretrained", True),
             latent_size=conf.get("latent_size", 128),
+            encode_cam=conf.get("encode_cam", True),
         )
 
 
@@ -331,6 +363,7 @@ class FieldEncoder(nn.Module):
         self.c = None
         self.focal = None
         self.num_views_per_object = None
+        self.num_objs = None
 
     def index(self, uv, cam_z=None, image_size=(), z_bounds=None):
         """
@@ -478,7 +511,7 @@ class FieldEncoder(nn.Module):
         updated_volumes = add_pointclouds_to_volumes(
             pointclouds=pointclouds,
             initial_volumes=initial_volumes,
-            mode="nearest", #"trilinear"
+            mode="trilinear", #"nearest"
         )
         vol_feats = updated_volumes.features()
         vol_feats = vol_feats.permute(0, 1, 4, 3, 2)

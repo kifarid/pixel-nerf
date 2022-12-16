@@ -13,6 +13,9 @@ import os.path as osp
 import warnings
 
 
+from pytorch3d.structures import Volumes, Pointclouds
+from pytorch3d.ops import add_pointclouds_to_volumes
+
 class PixelNeRFNet(torch.nn.Module):
     def __init__(self, conf, stop_encoder_grad=False):
         """
@@ -144,13 +147,13 @@ class PixelNeRFNet(torch.nn.Module):
         self.c = c
 
         if self.use_global_encoder:
-            if self.global_encoder_type == "field":
-                self.pass_to_global_encoder(poses=self.poses,
-                                            c=self.c,
-                                            focal=self.focal,
-                                            num_views_per_obj=self.num_views_per_obj,
-                                            image_shape=self.image_shape,
-                                            num_objs=self.num_objs)
+            #if self.global_encoder_type == "field":
+            self.pass_to_global_encoder(poses=self.poses,
+                                        c=self.c,
+                                        focal=self.focal,
+                                        num_views_per_obj=self.num_views_per_obj,
+                                        image_shape=self.image_shape,
+                                        num_objs=self.num_objs)
 
         if self.use_encoder:
             self.encoder(images)
@@ -181,6 +184,54 @@ class PixelNeRFNet(torch.nn.Module):
         ]
         xyz = xyz_rot + self.poses[:, None, :3, 3]
         return xyz
+
+    def get_pnts(self):
+        #TODO(Karim) add start and end voxel size to the config
+
+        dim_grid = []
+        for s, e in zip(self.start, self.end):
+            dim_grid.append(torch.linspace(start=s, end=e, steps=int((e - s) / self.voxel_size)))
+        dim_grid = torch.meshgrid(dim_grid)
+        dim_grid = torch.stack(dim_grid, dim=-1).flatten(end_dim=-2)
+
+        return dim_grid.to(self.device)
+
+    def construct_grid(self):
+
+        xyz = self.get_pnts()
+        xyz = xyz[None, ...].expand(self.num_objs, -1, -1)
+
+        SB, B, _ = xyz.shape
+        NS = self.num_views_per_obj
+        xyz_rep = repeat_interleave(xyz, NS)  # (SB*NS, B, 3)
+        # Transform query points into the camera spaces of the input views
+        xyz_local = self.transform_to_local(xyz_rep)
+        uv = self.transform_to_cam(xyz_local)
+        latent = self.encoder.index(
+            uv, None, self.image_shape
+        )  # (SB * NS, latent, B)
+        # get another view of latent with num of objects and num of views per object
+        latent = latent.view(SB, NS, -1, B).mean(dim=1)  # (SB, latent, B)
+
+        pointclouds = Pointclouds(
+            points=xyz, features=latent.permute(0, 2, 1).float())
+        grid_max = int(self.grid.max())
+
+        initial_volumes = Volumes(
+            features=torch.zeros(latent.size(0), self.latent_size, *(grid_max, grid_max, grid_max)).float(),
+            densities=torch.zeros(latent.size(0), 1, *(grid_max, grid_max, grid_max)).float(),
+            volume_translation=-torch.from_numpy((self.end + self.start) / 2).float(),
+            voxel_size=self.voxel_size,
+        )#.to(self.device) #TODO could lead to error
+
+        updated_volumes = add_pointclouds_to_volumes(
+            pointclouds=pointclouds,
+            initial_volumes=initial_volumes,
+            mode="trilinear",
+        )
+        vol_feats = updated_volumes.features()
+        vol_feats = vol_feats.permute(0, 1, 4, 3, 2)
+        return vol_feats
 
     def get_latent(self):
         global_latent, latent = None, None
