@@ -31,11 +31,11 @@ model:
         - 1
         - 1 #0.75
         voxel_size: 0.0625
-        pnts_per_voxel: 10
+        pnts_per_voxel: 1
         vol_conv_num_layers: 3
         vol_conv_num_units: 128
         vol_fc_layers: 3
-        vol_fc_units: 300
+        vol_fc_units: 256
       gamma: 1.0
       base_learning_rate: 1e-4
       freeze_enc: false
@@ -84,7 +84,7 @@ data:
       params:
         path:  /work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion
         stage: train
-        views_per_scene: 3
+        views_per_scene: 4
         z_near: 0.01
         z_far: 1.6
 
@@ -93,7 +93,7 @@ data:
       params:
         path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion
         stage: val
-        views_per_scene: 3
+        views_per_scene: 4
         z_near: 0.01
         z_far: 1.6
 
@@ -102,7 +102,7 @@ data:
       params:
         path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion
         stage: test
-        views_per_scene: 3
+        views_per_scene: 4
         z_near: 0.01
         z_far: 1.6
 
@@ -125,11 +125,11 @@ lightning:
 
   trainer:
     benchmark: True
-    log_every_n_steps: 4
+    log_every_n_steps: 10
     accumulate_grad_batches: 1
     devices: 0, #0, 1
     accelerator: "gpu"
-    #limit_train_batches: 4
+    limit_train_batches: 1
     #limit_val_batches: 10
     #limit_test_batches: 10
     max_epochs: 500

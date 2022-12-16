@@ -84,7 +84,7 @@ class Rollout(Callback):
         dataloader_idx: int,
     ) -> None:
 
-        if pl_module.current_epoch >= self.skip_epochs and (pl_module.current_epoch + 1) % self.rollout_freq == 0:
+        if pl_module.current_epoch >= self.skip_epochs and ((pl_module.current_epoch + 1) % self.rollout_freq == 0) and (batch_idx + 1) % self.rollout_freq == 0:
 
             self.num_solved.append(self.env_rollouts(pl_module))
 

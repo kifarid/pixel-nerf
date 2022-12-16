@@ -500,7 +500,7 @@ class FieldEncoder(nn.Module):
             pretrained=conf.get("pretrained", True),
             num_layers=conf.get("num_layers", 4),
             voxel_size= conf.get("voxel_size", 0.03125),
-            pnts_per_voxel = conf.get("pnts_per_voxel", 5),
+            pnts_per_voxel = conf.get("pnts_per_voxel", 2),
             start=np.array(conf.get("start", [0., 0., 0.])),
             end=np.array(conf.get("end", [1., 1., 1.])),
             index_interp=conf.get("index_interp", "bilinear"),
