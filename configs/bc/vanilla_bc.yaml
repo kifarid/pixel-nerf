@@ -1,0 +1,114 @@
+model:
+  target: src.model.vanilla_bc.Vanilla_BC
+
+  params:
+    model_config:
+      base_learning_rate: 6e-4
+      type: basic
+      d_out: 128
+      n_hidden: 5
+      d_hidden: 128
+      action_space:
+        move_cmd_0:
+          type: "continuous"
+          size: 3
+          min: -1.0
+          max: 1.0
+        move_cmd_1:
+          type: "continuous"
+          size: 4
+          min: -1.0
+          max: 1.0
+        suction_cmd:
+          type: "discrete"
+          size: 2
+        acts_left:
+            type: "discrete"
+            size: 1000
+    backbone_config:
+          backbone: resnet34
+          pretrained: true
+          type: global
+          encode_cam: true
+
+data:
+  target: main.DataModuleFromConfig
+  params:
+
+    batch_size: 8
+    wrap: True
+    train:
+      target: src.data.RavensDataset.RDataset
+      params:
+        path:  data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        stage: train
+        views_per_scene: 3
+        z_near: 0.01
+        z_far: 1.6
+
+    validation:
+      target: src.data.RavensDataset.RDataset
+      params:
+        path: data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        stage: val
+        views_per_scene: 3
+        z_near: 0.01
+        z_far: 1.6
+
+    test:
+      target: src.data.RavensDataset.RDataset
+      params:
+        path: data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        stage: test
+        views_per_scene: 3
+        z_near: 0.01
+        z_far: 1.6
+
+
+
+lightning:
+  logger:
+    params:
+      entity: kifarid
+      project: Nerf_for_control
+
+  callbacks:
+    rollback_logger:
+      target: envs.rollout.Rollout
+      params:
+        env_cfg:
+          _target_: envs.ravens_envs.RavensWrapper
+          env:
+            _target_: envs.ravens_envs.ContinuousEnvironment
+            assets_root: 'envs/ravens/ravens/environments/assets'
+            disp: false
+            shared_memory: false
+            use_egl: false
+            hz: 480
+
+
+          task:
+            _target_: ravens.tasks.block_insertion.BlockInsertion
+            continuous: true
+
+          image_size: [ 120, 160 ]
+          world_scale: 1.0
+          coord_trans: [ 1, -1, -1, 1 ]
+        skip_epochs: 1
+        rollout_freq: 20
+        video: true
+        num_rollouts: 1
+        ep_len: 60
+        empty_cache: false
+        log_video_to_file: false
+
+  trainer:
+    benchmark: True
+    log_every_n_steps: 10 #10
+    accumulate_grad_batches: 1
+    devices: 0,
+    accelerator: "gpu"
+    #limit_train_batches: 2 #remove
+    #limit_val_batches: 1 #10
+    #limit_test_batches: 0 #10
+    max_epochs: 500

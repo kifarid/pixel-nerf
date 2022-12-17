@@ -1,5 +1,6 @@
 from .encoder import SpatialEncoder, ImageEncoder, FieldEncoder
 from .resnetfc import ResnetFC
+from .mlp import ImplicitNet
 from torch import nn
 
 
