@@ -41,7 +41,7 @@ class BC(pl.LightningModule):
         self.train_backbone_bc_obj = train_backbone_bc_obj
         self.instantiate_backbone(backbone_config)
         self.action_space = model_config["action_space"]
-        self.scheudler_config = scheduler_config
+        self.scheduler_config = scheduler_config
         self.base_bc = make_mlp(model_config, d_in=self.backbone_model.net.d_latent)
         # .to(device=self.device)
         # create heads from action_space
@@ -257,7 +257,7 @@ class BC(pl.LightningModule):
         params = list(self.base_bc.parameters()) + list(self.heads.parameters())
 
         opt = torch.optim.AdamW(params, lr=lr)
-        if self.scheudler_config is not None:
+        if self.scheduler_config is not None:
             assert 'target' in self.scheduler_config
             scheduler = instantiate_from_config(self.scheduler_config)
 
