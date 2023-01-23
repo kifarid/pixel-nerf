@@ -111,9 +111,9 @@ def action_dict_to_tensor(action):
         # check if v is tuple then loop and convert to torch tensor
         if isinstance(v, tuple):
             for i in range(len(v)):
-                act_dict[f"{k}_{i}"] = torch.tensor(v[i])
+                act_dict[f"{k}_{i}"] = torch.tensor(v[i]).to(torch.float32)
         else:
-            act_dict[k] = torch.tensor(v)
+            act_dict[k] = torch.tensor(v) #.to(torch.float32)
 
     return act_dict
 

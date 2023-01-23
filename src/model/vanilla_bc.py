@@ -25,7 +25,7 @@ class Vanilla_BC(pl.LightningModule):
         self.scheduler_config  = scheduler_config
         self.instantiate_backbone(backbone_config)
         self.action_space = model_config["action_space"]
-        self.base_bc = make_mlp(model_config, d_in=self.backbone_model.latent_size)
+        self.base_bc = make_mlp(model_config, d_in=self.backbone_model.latent_size) # 3 for views
         self.heads = nn.ModuleDict()
 
         for k, v in self.action_space.items():
@@ -48,8 +48,7 @@ class Vanilla_BC(pl.LightningModule):
             if v["type"] == "discrete":
                 loss_dict[k] = self.cross_entropy_loss(preds[k], gt[k])
             elif v["type"] == "continuous":
-
-                loss_dict[k] = self.mse_loss(preds[k], gt[k])
+                loss_dict[k] = torch.sqrt(self.mse_loss(preds[k], gt[k]))
 
         # get mean of the losses
         loss = torch.mean(torch.stack(list(loss_dict.values())))
@@ -71,22 +70,25 @@ class Vanilla_BC(pl.LightningModule):
         return preds
 
     def step(self, data):
+        # move the data dict to the device of the model
         with torch.no_grad():
+            data = {k: v.to(self.device) for k, v in data.items()}
             pred = self.forward(data)
             for k, v in self.action_space.items():
                 # check if discrete then return max index along last dim
                 if v["type"] == "discrete":
                     pred[k] = torch.argmax(pred[k], dim=-1)
-
         return pred
 
     def training_step(self, data, batch_idx):
+        self.eval_all_models()
         preds = self.forward(data)
         loss, loss_dict = self.calc_losses(data["actions"], preds)
         # log loss and loss dict
+        #print("\n loss in training step: ", loss, "\n")
         self.log("bc_train_loss", loss, on_step=True, on_epoch=True)
         self.log("bc_train_loss_dict", loss_dict, on_step=True, on_epoch=True)
-
+        self.eval_all_models()
         return loss  # return loss to be used by the optimizer
 
     def validation_step(self, data, batch_idx):
@@ -94,10 +96,10 @@ class Vanilla_BC(pl.LightningModule):
         with torch.no_grad():
             preds = self.forward(data)
             loss, loss_dict = self.calc_losses(data["actions"], preds)
-
+        #print("\n loss in validati step: ", loss, "\n")
         self.log("bc_val_loss", loss, on_step=True, on_epoch=True)
         self.log("bc_val_loss_dict", loss_dict, on_step=True, on_epoch=True)
-        self.train_all_models()
+        self.eval_all_models()
         return loss
 
     def test_step(self, data, batch_idx):
@@ -193,6 +195,12 @@ class Vanilla_BC(pl.LightningModule):
                               num_objs=num_objs)
 
         latent = self.backbone_model(images)
+        self.pass_to_backbone(poses=None,
+                              c=None,
+                              num_views_per_obj=None,
+                              focal=None,
+                              image_shape=None,
+                              num_objs=None)
         return latent
 
     def pass_to_backbone(self, **kwargs):
@@ -201,14 +209,14 @@ class Vanilla_BC(pl.LightningModule):
 
     def get_input(self, batch):
         x = batch
-        all_images = x["images"].float()  # .to(device=device)  # (SB, NV, 3, H, W)
+        all_images = x["images"].float()  # (SB, NV, 3, H, W)
         SB, NV, _, H, W = all_images.shape
-        all_poses = x["poses"].float()  # .to(device=device)  # (SB, NV, 4, 4
+        all_poses = x["poses"].float()  # (SB, NV, 4, 4
         all_focals = x["focal"].float()  # (SB)
         all_c = x.get("c").float()  # (SB)
 
         x = self.encode_backbone(all_images, all_poses, all_focals, c=all_c if all_c is not None else None)
-        x = x.view(SB, NV, -1).mean(1)
+        x = x.view(SB, NV, -1).mean(1) 
         return x
 
     def configure_optimizers(self):

@@ -34,13 +34,6 @@ class RDataset(torch.utils.data.Dataset):
         self.stage = stage
         assert os.path.exists(self.base_path)
 
-        is_chair = "chair" in self.dataset_name
-        if is_chair and stage == "train":
-            # Ugly thing from SRN's public dataset
-            tmp = os.path.join(self.base_path, "chairs_2.0_train")
-            if os.path.exists(tmp):
-                self.base_path = tmp
-
         self.intrins = sorted(
             glob.glob(os.path.join(self.base_path, "*", "intrinsics.txt"))
         )

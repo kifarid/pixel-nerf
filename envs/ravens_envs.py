@@ -487,14 +487,14 @@ class Environment(gym.Env):
     # Robot Movement Functions
     # ---------------------------------------------------------------------------
 
-    def movej(self, targj, speed=0.01, timeout=5):
+    def movej(self, targj, speed=0.01, timeout=10):
         """Move UR5 to target joint configuration."""
         t0 = time.time()
         while (time.time() - t0) < timeout:
             currj = [p.getJointState(self.ur5, i)[0] for i in self.joints]
             currj = np.array(currj)
             diffj = targj - currj
-            if all(np.abs(diffj) < 1e-2):
+            if all(np.abs(diffj) < 4e-3):
                 return False
 
             # Move with constant velocity
@@ -508,7 +508,10 @@ class Environment(gym.Env):
                 controlMode=p.POSITION_CONTROL,
                 targetPositions=stepj,
                 positionGains=gains)
+            
+            #step until robot is stable
             p.stepSimulation()
+    
         print(f'Warning: movej exceeded {timeout} second timeout. Skipping.')
         return True
 
@@ -571,7 +574,10 @@ class Environment(gym.Env):
             self.ee_cams[i]['position'] = tuple(new_pos)
 
     def get_ee_pose(self):
-        return p.getLinkState(self.ur5, self.ee_tip)[0:2]
+        # Get end effector pose and round to 3 decimals.
+        ee_pose = p.getLinkState(self.ur5, self.ee_tip)[0:2]
+        ee_pose = (np.round(ee_pose[0], 4), np.round(ee_pose[1], 4))
+        return ee_pose
 
 
 class ContinuousEnvironment(Environment):
@@ -647,11 +653,12 @@ class ContinuousEnvironment(Environment):
 class RavensWrapper(gym.Wrapper):
     """A wrapper for the Ravens environment."""
     # add typing to init
-    def __init__(self, env, task, stage: str = "train", image_size: List = (160, 120) , world_scale: float = 1.0 , coord_trans: List = None):
+    def __init__(self, env, task, residual: bool = True, stage: str = "train", image_size: List = (160, 120) , views_per_scene: int = 3, world_scale: float = 1.0 , coord_trans: List = None):
 
         self.env = env
         self.task = task
         self.task.mode = stage
+        self.residual = residual
 
         self.image_size = tuple(image_size)
         self.world_scale = world_scale
@@ -663,6 +670,7 @@ class RavensWrapper(gym.Wrapper):
             torch.tensor(coord_trans if coord_trans is not None else [1, -1, -1, 1], dtype=torch.float32)
         )
         self.env.set_task(self.task)
+        self.views_per_scene = views_per_scene
 
     def reset(self, **kwargs):
         obs = self.env.reset(**kwargs)
@@ -697,7 +705,7 @@ class RavensWrapper(gym.Wrapper):
         obs_preprocessed = defaultdict(list)
         # TODO(karim): add intrinsics per image
 
-        for view in range(len(obs["color"])):
+        for view in range(min(self.views_per_scene, len(obs["color"]))):
             #loop through all the views
 
             obs_preprocessed["images"].append(self.image_to_tensor(obs["color"][view]))
@@ -753,8 +761,17 @@ class RavensWrapper(gym.Wrapper):
                 # check if action is discrete get max value
                 action_processed[key] = tuple([action[f"{key}_{str(i)}"].squeeze().detach().cpu().numpy() for i in range(len_space)])
             else:
-                action_processed[key] = action[key].squeeze().detach().cpu().numpy()
+                # if key is not in action return 0
+                action_processed[key] = action[key].squeeze().detach().cpu().numpy() if key in action else 0
         #convert actions from tensor to numpy
+
+        #check if residul is true then add to ee_pose else return
+        if self.residual:
+            action_processed = copy.deepcopy(action_processed)
+            ee_pose = self.env.get_ee_pose()
+            action_processed["move_cmd"] = (action_processed["move_cmd"][0] + ee_pose[0],
+             action_processed["move_cmd"][1] + ee_pose[1])
+
         return action_processed
 
     def step(self, action):

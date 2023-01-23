@@ -72,27 +72,27 @@ data:
     train:
       target: src.data.RavensDataset.RDataset
       params:
-        path:  /work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        path:  /work/dlclarge2/faridk-nerf_rl/data/block_insertion_1000/block_insertion #/work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         stage: train
-        views_per_scene: 4
+        views_per_scene: 3
         z_near: 0.01
         z_far: 1.6
 
     validation:
       target: src.data.RavensDataset.RDataset
       params:
-        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion  #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion_1000/block_insertion #/work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion  #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         stage: val
-        views_per_scene: 4
+        views_per_scene: 3
         z_near: 0.01
         z_far: 1.6
 
     test:
       target: src.data.RavensDataset.RDataset
       params:
-        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion_1000/block_insertion #/work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         stage: test
-        views_per_scene: 4
+        views_per_scene: 3
         z_near: 0.01
         z_far: 1.6
 
