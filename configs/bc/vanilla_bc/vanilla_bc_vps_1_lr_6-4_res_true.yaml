@@ -3,7 +3,7 @@ model:
 
   params:
     model_config:
-      base_learning_rate: 6e-4
+      base_learning_rate: 3e-4
       type: basic
       d_out: 128
       n_hidden: 0
@@ -37,7 +37,7 @@ model:
       step_size: 200
       gamma: 0.9
     #monitor: 'bc_val_loss'
-    discrete_loss_weight: 1e-5
+    discrete_loss_weight: 0 # 1e-5
 data:
   target: main.DataModuleFromConfig
   params:
@@ -103,7 +103,7 @@ lightning:
           coord_trans: [ 1, -1, -1, 1 ]
           residual: true
           
-        skip_epochs: 3000
+        skip_epochs: 6000
         rollout_freq: 10
         video: true
         num_rollouts: 5 #10

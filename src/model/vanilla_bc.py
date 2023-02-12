@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
-from torch.optim.lr_scheduler import LambdaLR
+from torch.optim.lr_scheduler import StepLR
 
 from src.util import instantiate_from_config
 from src.model.model_util import make_mlp
@@ -12,12 +12,14 @@ class Vanilla_BC(pl.LightningModule):
     # classic imitation learning policy
 
     def __init__(self,
+                
                  model_config,
                  backbone_config,
                  scheduler_config=None,
                  ignore_keys=list(),
                  ckpt_path=None,
                  monitor=None,
+                 discrete_loss_weight=5e-6,
                  base_learning_rate=1e-4,
                  ):
         super().__init__()
@@ -35,7 +37,7 @@ class Vanilla_BC(pl.LightningModule):
         # create losses needed
         self.cross_entropy_loss = nn.CrossEntropyLoss()
         self.mse_loss = nn.MSELoss()
-
+        self.discrete_loss_weight = discrete_loss_weight
         if monitor is not None:
             self.monitor = monitor
         if ckpt_path is not None:
@@ -46,9 +48,9 @@ class Vanilla_BC(pl.LightningModule):
         loss_dict = {}
         for k, v in self.action_space.items():
             if v["type"] == "discrete":
-                loss_dict[k] = self.cross_entropy_loss(preds[k], gt[k])
+                loss_dict[k] = self.discrete_loss_weight*self.cross_entropy_loss(preds[k], gt[k])
             elif v["type"] == "continuous":
-                loss_dict[k] = torch.sqrt(self.mse_loss(preds[k], gt[k]))
+                loss_dict[k] = self.mse_loss(preds[k], gt[k]) # removed sqrt
 
         # get mean of the losses
         loss = torch.mean(torch.stack(list(loss_dict.values())))
@@ -64,8 +66,8 @@ class Vanilla_BC(pl.LightningModule):
         for k, v in self.action_space.items():
             preds[k] = self.heads[k](x)
             # bound preds by range of action space
-            if v["type"] == "continuous":
-                preds[k] = torch.clamp(preds[k], v["min"], v["max"])
+            #if v["type"] == "continuous":
+            #    preds[k] = torch.clamp(preds[k], v["min"], v["max"])
 
         return preds
 
@@ -117,7 +119,8 @@ class Vanilla_BC(pl.LightningModule):
     def instantiate_backbone(self, config):
         model = ImageEncoder.from_conf(config)
         self.backbone_model = model
-
+        # freeze backbone
+        
     def eval_all_models(self):
         self.base_bc.eval()
         self.heads.eval()
@@ -194,7 +197,10 @@ class Vanilla_BC(pl.LightningModule):
                               image_shape=image_shape,
                               num_objs=num_objs)
 
+        
+        # run backbone withour gradients
         latent = self.backbone_model(images)
+        
         self.pass_to_backbone(poses=None,
                               c=None,
                               num_views_per_obj=None,
@@ -226,14 +232,11 @@ class Vanilla_BC(pl.LightningModule):
 
         opt = torch.optim.AdamW(params, lr=lr)
         if self.scheduler_config is not None:
-            assert 'target' in self.scheduler_config
-            scheduler = instantiate_from_config(self.scheduler_config)
-
             print("Setting up LambdaLR scheduler...")
             scheduler = [
                 {
-                    'scheduler': LambdaLR(opt, lr_lambda=scheduler.schedule),
-                    'interval': 'step',
+                    'scheduler': StepLR(opt, **self.scheduler_config),
+                    'interval': 'epoch',
                     'frequency': 1
                 }]
             return [opt], scheduler
