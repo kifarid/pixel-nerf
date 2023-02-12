@@ -32,12 +32,12 @@ model:
           backbone: resnet18
           pretrained: true
           type: global
-          encode_cam: true
+          encode_cam: false
     scheduler_config:
       step_size: 200
       gamma: 0.9
     #monitor: 'bc_val_loss'
-    discrete_loss_weight: 1e-5
+    discrete_loss_weight: 0 #1e-5
 data:
   target: main.DataModuleFromConfig
   params:
@@ -48,7 +48,7 @@ data:
     train:
       target: src.data.RavensDataset.RDataset
       params:
-        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion_res_20/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion_20/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         stage: train
         views_per_scene: 1
         z_near: 0.01
@@ -57,7 +57,7 @@ data:
     validation:
       target: src.data.RavensDataset.RDataset
       params:
-        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion_res_20/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion_20/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         stage: train
         views_per_scene: 1
         z_near: 0.01
@@ -66,7 +66,7 @@ data:
     test:
       target: src.data.RavensDataset.RDataset
       params:
-        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion_res_20/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion_20/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         stage: train
         views_per_scene: 1
         z_near: 0.01
@@ -101,9 +101,9 @@ lightning:
           image_size: [ 120, 160 ]
           world_scale: 1.0
           coord_trans: [ 1, -1, -1, 1 ]
-          residual: true
+          residual: false
           
-        skip_epochs: 3000
+        skip_epochs: 6000
         rollout_freq: 10
         video: true
         num_rollouts: 5 #10

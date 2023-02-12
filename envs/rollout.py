@@ -222,7 +222,7 @@ class Rollout(Callback):
             if record_video:
                 # update video
                 # squeeze first dim in obs
-                img_v1 = obs["images"][:, 1, ...].unsqueeze(1)
+                img_v1 = obs["images"][:, 0, ...].unsqueeze(1)
                 self.rollout_video.update(img_v1)
 
             #true_action = agent.act(obs, info)
@@ -243,10 +243,13 @@ class Rollout(Callback):
                 #set everything other than move_cmd_0 in act to true_batch_act
                 act_to_env = {}
                 for key in true_batch_act.keys():
-                    if key != 'move_cmd_0':
-                        act_to_env[key] = true_batch_act[key]
-                    else:
-                        act_to_env[key] = act[key]
+                    act_to_env[key] = act[key]
+                    #if key == 'succion_cmd':
+                    #    act_to_env[key] = true_batch_act[key]
+                    # if key != 'move_cmd_0':
+                    #     act_to_env[key] = true_batch_act[key]
+                    # else:
+                    #     act_to_env[key] = act[key]
 
                 # #act["move_cmd_0"] = torch.tensor(true_action["move_cmd"][0]).unsqueeze(0).to(self.device)
                 #act["move_cmd_1"] = torch.tensor(true_batch_acts["move_cmd"][1]).unsqueeze(0).to(self.device)
@@ -268,7 +271,7 @@ class Rollout(Callback):
                 if record_video:
                     # update video
                     # squeeze first dim in obs
-                    img_v1 = obs["images"][:, 1, ...].unsqueeze(1)
+                    img_v1 = obs["images"][:, 0, ...].unsqueeze(1)
                     self.rollout_video.update(img_v1)
                 total_reward += reward
                 #print(f'Total Reward: {total_reward} Done: {done}')
