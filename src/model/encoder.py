@@ -190,7 +190,7 @@ class ImageEncoder(nn.Module):
     Global image encoder
     """
 
-    def __init__(self, backbone="resnet34", pretrained=True, latent_size=128, encode_cam=True):
+    def __init__(self, backbone="resnet34", pretrained=True, latent_size=128, encode_cam=True, frame_stack=1, image_size=(150, 200)):
         """
         :param backbone Backbone network. Assumes it is resnet*
         e.g. resnet34 | resnet50
@@ -198,10 +198,14 @@ class ImageEncoder(nn.Module):
         :param pretrained Whether to use model pretrained on ImageNet
         """
         super().__init__()
+        self.backbone_name = backbone
         #self.model = getattr(torchvision.models, backbone)(pretrained=pretrained)
-        if backbone=="basic":
+        if backbone == "basic1":
             print("creating basic backbone")
             self.model = BasicBackbone()
+        elif backbone == "basic2":
+            print("creating basic2 backbone")
+            self.model = BasicBackbone2(frame_stack, image_size)
         else:
             self.model = getattr(torchvision.models, backbone)(pretrained=pretrained)
 
@@ -217,6 +221,7 @@ class ImageEncoder(nn.Module):
         self.c = None
         self.focal = None
         self.num_views_per_object = None
+        self.T = None
         self.num_objs = None
         self.encode_cam = encode_cam
 
@@ -224,7 +229,7 @@ class ImageEncoder(nn.Module):
         if self.encode_cam:
 
             self.g_mlp = nn.Sequential(
-                nn.Linear(12+2+2 + latent_size, 128),
+                nn.Linear(12+2+2 +latent_size, 128),
                 nn.ReLU(),
                 *[nn.Sequential(nn.Linear(128, 128), nn.ReLU()) for _ in range(1)],
                 nn.Linear(128, latent_size)
@@ -241,22 +246,25 @@ class ImageEncoder(nn.Module):
     def forward(self, x):
         """
         For extracting ResNet's features.
-        :param x image (B, C, H, W)
+        :param x image (B, C, H, W) / (B*NV*T, C, H, W)
         :return latent (B, latent_size)
         """
         x = x.to(device=self.latent.device)
-        x = self.model.conv1(x)
-        #x = self.model.bn1(x)
-        x = self.model.relu(x)
 
-        x = self.model.maxpool(x)
-        x = self.model.layer1(x)
-        x = self.model.layer2(x)
-        x = self.model.layer3(x)
-        x = self.model.layer4(x)
+        if self.backbone_name != "basic2":
+            x = self.model.conv1(x)
+            # x = self.model.bn1(x)
+            x = self.model.relu(x)
+            x = self.model.maxpool(x)
+            x = self.model.layer1(x)
+            x = self.model.layer2(x)
+            x = self.model.layer3(x)
+            x = self.model.layer4(x)
 
-        x = self.model.avgpool(x)
-        x = torch.flatten(x, 1)
+            x = self.model.avgpool(x)
+            x = torch.flatten(x, 1)
+        else:
+            x = self.model(x)
 
         if self.latent_size != 512:
             x = self.fc(x)
@@ -268,12 +276,27 @@ class ImageEncoder(nn.Module):
             # poses (SB*NS, 12)
             # c (SB, 2)
             # focal (SB, 2)
-            f = repeat_interleave(self.focal,
-                                  self.num_views_per_obj)
-            c = repeat_interleave(self.c, self.num_views_per_obj)
-            x = self.g_mlp(torch.cat([x, self.poses.flatten(1, -1), f, c], dim=-1))
-            self.latent = x
 
+            if len(self.focal.shape) == 2: # (B, 2)
+                f = repeat_interleave(self.focal,
+                                      self.num_views_per_obj)
+                c = repeat_interleave(self.c, self.num_views_per_obj)
+
+            elif len(self.focal.shape) == 3: # (B, NV, 2)
+                f = self.focal.flatten(0, 1) # (B*NV, 2)
+                c = self.c.flatten(0, 1)
+
+            # add T dimension to make f and c (B*NV*T, 2) note, this is not enabled in framestacking
+            if self.T is not None:
+                f = repeat_interleave(f, self.T)
+                c = repeat_interleave(c, self.T)
+
+            # x (B*NV*T, latent_size)
+            # self.poses.flatten(1, -1) (B*NV*T, 12)
+            # f (B*NV*T, 2)
+            # c (B*NV*T, 2)
+            x = self.g_mlp(torch.cat([x, self.poses.flatten(1, -1), f, c], dim=-1))
+            self.latent = x # (B*NV*T, latent_size) or (B*NV, latent_size)
         return self.latent
 
     @classmethod
@@ -283,8 +306,8 @@ class ImageEncoder(nn.Module):
             pretrained=conf.get("pretrained", True),
             latent_size=conf.get("latent_size", 128),
             encode_cam=conf.get("encode_cam", True),
+            frame_stack=conf.get("frame_stack", 1),
         )
-
 
 class FieldEncoder(nn.Module):
     """
@@ -549,14 +572,15 @@ class FieldEncoder(nn.Module):
             use_first_pool=conf.get("use_first_pool", True),
         )
 
+
 class BasicBackbone(nn.Module):
     def __init__(self):
         super().__init__()
         #create a net work with 5 conv layers
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=7, stride=2, padding=3, bias=False)
         self.relu = nn.ReLU()
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1, dilation=1, ceil_mode=False)
-        self.layer1 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1, bias=False),
+        self.layer1 = nn.Sequential(nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1, bias=False),
                                     nn.ReLU(),
                                     nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1, bias=False),
                                     nn.ReLU(),
@@ -589,4 +613,38 @@ class BasicBackbone(nn.Module):
         x = self.layer3(x)
         x = self.layer4(x)
         x = self.avgpool(x)
+        return x
+
+
+class BasicBackbone2(nn.Module):
+    def __init__(self, frame_stack=1, image_size=(150, 200)):
+        super().__init__()
+        #create a net work with 5 conv layers
+        self.conv1 = nn.Conv2d(3*frame_stack, 32, kernel_size=3, stride=2, bias=False)
+        self.relu = nn.ReLU()
+        self.layer1 = nn.Sequential(nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, bias=False),
+                                    nn.ReLU(),
+                                    nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, bias=False),
+                                    nn.ReLU(),
+                                    nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1, bias=False),
+                                    nn.ReLU(),
+                                    nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, bias=False),
+                                    nn.ReLU(),
+                                    nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, bias=False),
+                                    nn.ReLU(),
+                                    )
+        self.base_fc = nn.Linear(32*int(image_size[0]/4)*int(image_size[1]/4), 512)
+        #add layernorm
+        #self.layernorm = nn.LayerNorm(512)
+        #self.tanh = nn.Tanh()
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.relu(x)
+        #x = self.maxpool(x)
+        x = self.layer1(x)
+        x = x.view(x.size(0), -1)
+        x = self.base_fc(x)
+        #x = self.layernorm(x)
+        #x = self.tanh(x)
         return x

@@ -345,7 +345,6 @@ class ImageLogger(Callback):
 
     def log_img(self, pl_module, batch, batch_idx, split="train"):
         check_idx = batch_idx if self.log_on_batch_idx else pl_module.global_step
-        #print(f"should log image {check_idx}")
         if (self.check_frequency(check_idx, split) and
                 hasattr(pl_module, "log_images") and
                 callable(pl_module.log_images) and
@@ -392,7 +391,7 @@ class ImageLogger(Callback):
             #pass
             self.log_img(pl_module, batch, batch_idx, split="train")
 
-    def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
+    def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, data_loader_idx=None):
         if not self.disabled and pl_module.global_step > 0:
             self.log_img(pl_module, batch, batch_idx, split="val")
         if hasattr(pl_module, 'calibrate_grad_norm'):
@@ -436,7 +435,7 @@ class PrintCallback(Callback):
         if (pl_module.global_step > 0 or self.log_first_step):
             self.print_loss(pl_module, outputs, batch_idx, trainer.current_epoch)
 
-    def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
+    def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
         # TODO add dataloader_idx later
         if pl_module.global_step > 0:
             self.print_loss(pl_module, outputs, batch_idx, trainer.current_epoch, "val")
@@ -518,6 +517,7 @@ if __name__ == "__main__":
     parser = Trainer.add_argparse_args(parser)
 
     opt, unknown = parser.parse_known_args()
+    #opt.resume_from_checkpoint = "models/bc/checkpoints/model.ckpt"
     if opt.name and opt.resume:
         raise ValueError(
             "-n/--name and -r/--resume cannot be specified both."
@@ -674,9 +674,9 @@ if __name__ == "__main__":
                     # "log_momentum": True
                 }
             },
-            "cuda_callback": {
-                "target": "main.CUDACallback"
-            },
+            # "cuda_callback": {
+            #     "target": "main.CUDACallback"
+            # },
         #     "print_callback": {
         #         "target": "main.PrintCallback",
         #         "params": {

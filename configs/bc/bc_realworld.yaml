@@ -1,0 +1,81 @@
+model:
+  target: src.model.vanilla_bc_rw.Vanilla_BC_RW
+
+  params:
+    model_config:
+      base_learning_rate: 1e-4
+      type: basic
+      d_out: 128
+      n_hidden: 5
+      d_hidden: 128
+      action_space:
+        pos:
+          type: "continuous"
+          size: 3
+          min: -1.0
+          max: 1.0
+        quat:
+          type: "continuous"
+          size: 4
+          min: -1.0
+          max: 1.0
+        close:
+          type: "discrete"
+          size: 2
+          min: -1.0
+        # acts_left:
+        #     type: "discrete"
+        #     size: 1000
+    backbone_config:
+          backbone: basic2
+          type: global
+          encode_cam: false
+          frame_stack: 2
+
+data:
+  target: main.DataModuleFromConfig
+  params:
+
+    batch_size: 128
+    num_workers: 1
+    wrap: True
+    train:
+      target: src.data.RealWorldDataset.TeleopData
+      params:
+        directory: /Users/kfarid/Desktop/Education/MSc_Freiburg/research/robot_io/expert_data/val #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        frame_stack: 2
+
+    validation:
+      target: src.data.RealWorldDataset.TeleopData
+      params:
+        directory: /Users/kfarid/Desktop/Education/MSc_Freiburg/research/robot_io/expert_data/val #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        frame_stack: 2
+        views:
+          - 1
+
+    test:
+      target: src.data.RealWorldDataset.TeleopData
+      params:
+        directory: /Users/kfarid/Desktop/Education/MSc_Freiburg/research/robot_io/expert_data/val #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        frame_stack: 2
+        views:
+          - 1
+
+
+
+lightning:
+  logger:
+    params:
+      entity: kifarid
+      project: Nerf_for_control
+
+  trainer:
+    benchmark: True
+    log_every_n_steps: 1 #10
+    accumulate_grad_batches: 1
+    #devices: 0,
+    #accelerator: "gpu"
+    limit_train_batches: 2 #remove
+    limit_val_batches: 1 #10
+    #limit_test_batches: 0 #10
+    max_epochs: 10000

@@ -117,6 +117,19 @@ def action_dict_to_tensor(action):
 
     return act_dict
 
+def dict_to_tensor(action):
+    # convert action to tensor
+    dict = {}
+    for k, v in action.items():
+        # check if v is tuple then loop and convert to torch tensor
+        if isinstance(v, tuple):
+            for i in range(len(v)):
+                dict[f"{k}_{i}"] = torch.tensor(v[i].copy()).to(torch.float32)
+        else:
+            dict[k] = torch.tensor(v.copy()).to(torch.float32)
+
+    return dict
+
 
 def homogeneous(points):
     """
