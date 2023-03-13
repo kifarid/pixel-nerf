@@ -6,22 +6,26 @@ model:
       white_bkgd: false
       no_bbox_step: 10000
       bound_floor: false
+      vic_radius: 0.005
       z_far: ${data.params.train.params.z_far}
       z_near: ${data.params.train.params.z_near}
       gpus:
       ray_batch_size: 128 #1024
-      vic_radius: 0.0004 #0.001 #0.001
     model_config:
       # MLP architecture
       # Adapted for multiview
       # Possibly too big
+      type: dnerf
       gamma: 1.0
       base_learning_rate: 1e-4
-      use_encoder: true
-      freeze_enc: false #false
-      use_global_encoder: false
+      use_encoder: false
+      freeze_enc: false
+      use_global_encoder: true
+      global_encoder:
+        backbone: resnet18
+        pretrained: true
+        type: global
       use_xyz: true
-      canon_xyz: false
       use_code: true
       code:
         num_freqs: 6
@@ -44,11 +48,21 @@ model:
         d_out: 4
         combine_layer: 3
         combine_type: average
+      
+      mlp_flow:
+        type: resnet
+        n_blocks: 5
+        d_hidden: 512
+        d_out: 3
+        # Combine after 3rd layer by average
+        combine_layer: 3
+        combine_type: average
+
       nviews: '2'
       encoder:
-        backbone: resnet34
+        backbone: resnet18
         pretrained: true
-        num_layers: 4
+        num_layers: 3
     loss_config:
       rgb:
         use_l1: false
@@ -60,7 +74,8 @@ model:
         init_epoch: 5
       lambda_coarse: 1.0
       lambda_fine: 1.0
-      lambda_vic: 0.01
+      lambda_vic: 0.0
+      lambda_flow: 1
 
 data:
   target: main.DataModuleFromConfig
@@ -70,7 +85,7 @@ data:
     train:
       target: src.data.RavensDataset.RDataset
       params:
-        path:  /work/dlclarge2/faridk-nerf_rl/data/block_insertion_62/block_insertion
+        path:  /work/dlclarge2/faridk-nerf_rl/data/block_insertion_1000/block_insertion #/work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         stage: train
         views_per_scene: 3
         z_near: 0.01
@@ -79,7 +94,7 @@ data:
     validation:
       target: src.data.RavensDataset.RDataset
       params:
-        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion_62/block_insertion
+        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion_1000/block_insertion #/work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion  #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         stage: val
         views_per_scene: 3
         z_near: 0.01
@@ -88,7 +103,7 @@ data:
     test:
       target: src.data.RavensDataset.RDataset
       params:
-        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion_62/block_insertion
+        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion_1000/block_insertion #/work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         stage: test
         views_per_scene: 3
         z_near: 0.01
@@ -97,15 +112,16 @@ data:
 
 lightning:
 
-  callbacks:
-    image_logger:
-      target: main.ImageLogger
-      params:
-        batch_frequency: 300
-        batch_frequency_val: 10
-        max_images: 2
-        clamp: true
-        
+  # callbacks:
+  #   image_logger:
+  #     target: main.ImageLogger
+  #     params:
+  #       batch_frequency: 100
+  #       batch_frequency_val: 10
+  #       max_images: 1
+  #       clamp: true
+
+
   logger:
     params:
       entity: kifarid
@@ -113,15 +129,9 @@ lightning:
 
   trainer:
     benchmark: True
-    log_every_n_steps: 20
+    log_every_n_steps: 10 #10
     accumulate_grad_batches: 1
-    devices: 0,
+    devices: 1
     accelerator: "gpu"
-    #limit_train_batches: 4
-    # limit_val_batches: 10
-    # limit_test_batches: 10
     max_epochs: 500
-#    print_interval: 2
-#    save_interval: 50
-#    vis_interval: 100
-#    eval_interval: 50
+

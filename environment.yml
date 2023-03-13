@@ -10,7 +10,7 @@ channels:
   - conda-forge
   - bottler
 dependencies:
-  - python>=3.8
+  - python==3.8
   - pip
   - pip:
       - pyhocon
@@ -23,7 +23,7 @@ dependencies:
       - ipdb
       - pretrainedmodels
       - lpips
-      - tensorflow
+      #- tensorflow
       - wandb
       - hydra-core
       - omegaconf
@@ -33,7 +33,7 @@ dependencies:
       - imageio
   
   - scipy
-  - numpy
+  #- numpy
   - matplotlib
   - pytorch #==1.6.0
   - torchvision #==0.7.0

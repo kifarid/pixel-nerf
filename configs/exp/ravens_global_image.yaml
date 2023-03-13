@@ -10,6 +10,7 @@ model:
       z_near: ${data.params.train.params.z_near}
       gpus:
       ray_batch_size: 128 #1024
+      vic_radius: 0.0006 #0.001 #0.001
     model_config:
       # MLP architecture
       # Adapted for multiview
@@ -27,8 +28,8 @@ model:
       canon_xyz: false
       use_code: true
       code:
-        num_freqs: 6
-        freq_factor: 1.5
+        num_freqs: 20
+        freq_factor: 1
         include_input: true
       use_viewdirs: true
       use_code_viewdirs: false
@@ -62,17 +63,19 @@ model:
         clamp_alpha: 100
         init_epoch: 5
       lambda_coarse: 1.0
-      lambda_fine: 1.0
+      lambda_fine: 0.6
+      lambda_vic: 1
 
 data:
   target: main.DataModuleFromConfig
   params:
     batch_size: 4
     wrap: True
+    #num_workers: 16
     train:
       target: src.data.RavensDataset.RDataset
       params:
-        path:  /work/dlclarge2/faridk-nerf_rl/data/block_insertion_1000/block_insertion #/work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        path:  /work/dlclarge2/faridk-nerf_rl/data/block_insertion_62/block_insertion #/work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         stage: train
         views_per_scene: 3
         z_near: 0.01
@@ -81,7 +84,7 @@ data:
     validation:
       target: src.data.RavensDataset.RDataset
       params:
-        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion_1000/block_insertion #/work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion  #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion_62/block_insertion #/work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion  #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         stage: val
         views_per_scene: 3
         z_near: 0.01
@@ -90,7 +93,7 @@ data:
     test:
       target: src.data.RavensDataset.RDataset
       params:
-        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion_1000/block_insertion #/work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion_62/block_insertion #/work/dlclarge2/faridk-nerf_rl/data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         stage: test
         views_per_scene: 3
         z_near: 0.01
@@ -103,9 +106,9 @@ lightning:
     image_logger:
       target: main.ImageLogger
       params:
-        batch_frequency: 100
-        batch_frequency_val: 10
-        max_images: 1
+        batch_frequency: 500
+        batch_frequency_val: 20
+        max_images: 3
         clamp: true
 
 
@@ -116,15 +119,8 @@ lightning:
 
   trainer:
     benchmark: True
-    log_every_n_steps: 10 #10
-    accumulate_grad_batches: 1
-    devices: 0,
+    log_every_n_steps: 50 #10
+    #accumulate_grad_batches: 1
+    devices: 0, 
     accelerator: "gpu"
-    #limit_train_batches: 1 #remove
-    # limit_val_batches: 0 #10
-    # limit_test_batches: 0 #10
     max_epochs: 500
-#    print_interval: 2
-#    save_interval: 50
-#    vis_interval: 100
-#    eval_interval: 50

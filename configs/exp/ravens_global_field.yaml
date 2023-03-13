@@ -10,7 +10,7 @@ model:
       z_far: ${data.params.train.params.z_far}
       z_near: ${data.params.train.params.z_near}
       gpus:
-      ray_batch_size: 128 #1024
+      ray_batch_size: 1024 #1024
     model_config:
       # MLP architecture
       # Adapted for multiview
@@ -106,7 +106,6 @@ data:
         z_near: 0.01
         z_far: 1.6
 
-
 lightning:
   
   callbacks:
@@ -127,7 +126,7 @@ lightning:
     benchmark: True
     log_every_n_steps: 10
     accumulate_grad_batches: 1
-    devices: 0, #0, 1
+    devices: 0, 1 #0, 1
     accelerator: "gpu"
     limit_train_batches: 1
     #limit_val_batches: 10
