@@ -41,10 +41,10 @@ model:
         pretrained: true
         num_layers: 4
     renderer_config:
-      n_coarse: 64
-      n_fine: 32
-      n_fine_depth: 16
-      depth_std: 0.01
+      n_coarse: 64 #64
+      n_fine: 32 #32
+      n_fine_depth: 16 #16
+      depth_std: 0.005
       white_bkgd: true
     loss_config:
       rgb:

@@ -5,9 +5,10 @@ echo "Running job $SLURM_JOB_NAME using $SLURM_JOB_CPUS_PER_NODE cpus per node w
 
 
 # shellcheck disable=SC1091
-source ~/.bashrc                                                                                                                                                                         
-conda activate nerf_rl
-#sbatch train_bb_block_insert_spatial.sh
+source ~/.bashrc
+#sbatch train_bb_block_insert_global_image_dnerf.sh
+#sbatch train_bb_block_insert_global_image_multi.sh
+sbatch train_bb_block_insert_spatial.sh
 #sbatch train_bb_block_insert_field.sh
-sbatch train_bb_block_insert_global_image.sh
+#sbatch train_bb_block_insert_global_image.sh
 #sbatch train_bb_block_insert_global_image_frozen.sh
