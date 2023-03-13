@@ -4,7 +4,7 @@ import torch
 import util
 from dotmap import DotMap
 from model import make_model, loss
-from render import NeRFRenderer #, DNeRFRenderer
+from render import NeRFRenderer
 
 
 class NeRFAE(pl.LightningModule):
@@ -37,14 +37,13 @@ class NeRFAE(pl.LightningModule):
 
         self.no_bbox_step = renderer_config.no_bbox_step
         self.use_bbox = self.no_bbox_step > 0
+        # self.learning_rate = conf["model"].learning
 
         if self.net_type == "dnerf":
             self.renderer = DNeRFRenderer.from_conf(renderer_config, lindisp=False)
             self.lambda_flow = loss_config.get("lambda_flow", 0.0001)
         else:
             self.renderer = NeRFRenderer.from_conf(renderer_config, lindisp=False)
-
-
 
         # Parallize
         self.render_par = self.renderer.bind_parallel(self.net, renderer_config.gpus).eval()
@@ -173,21 +172,20 @@ class NeRFAE(pl.LightningModule):
             loss_dict["rf"] = fine_loss.item() * self.lambda_fine
 
         if using_vic:
-            vic_loss = self.lambda_coarse*self.lambda_vic*(coarse.rgb_vic_mse + coarse.depth_vic_mse)
+            vic_loss = self.lambda_coarse*self.lambda_vic*(coarse.depth_vic_diff) #coarse.rgb_vic_mse
             if using_fine:
-                vic_loss += self.lambda_fine*self.lambda_vic*(fine.rgb_vic_mse + fine.depth_vic_mse)
-            loss_dict["rd_vic"] = vic_loss.item() * self.lambda_vic
-
+                vic_loss += self.lambda_fine*self.lambda_vic/2*(fine.depth_vic_diff) #fine.rgb_vic_mse
+            loss_dict["rd_vic"] = vic_loss.item()
+            rgb_loss+=vic_loss
         if self.net_type == "dnerf":
             flow_loss = self.lambda_coarse*self.lambda_flow*coarse.flow_dist
             if using_fine:
                 flow_loss += self.lambda_fine*self.lambda_flow*fine.flow_dist
             loss_dict["flow"] = flow_loss.item()
-
-        loss = rgb_loss + vic_loss if using_vic else 0 + flow_loss if self.net_type== "dnerf" else 0
-        # if is_train:
-        #     loss.backward()
-        #loss_dict["t"] = loss.item()
+            rgb_loss+=flow_loss
+        
+        loss = rgb_loss
+        
         loss_dict["loss"] = loss
         return loss_dict
 

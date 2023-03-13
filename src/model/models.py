@@ -35,7 +35,7 @@ class PixelNeRFNet(torch.nn.Module):
         # So that all objects, regardless of camera distance to center, will
         # be centered at z=0.
         # Only makes sense in ShapeNet-type setting.
-        self.normalize_z = conf.get("normalize_z", True)
+        self.normalize_z = conf.get("normalize_z", False)
 
         self.stop_encoder_grad = (
             stop_encoder_grad  # Stop ConvNet gradient (freeze weights)
@@ -662,7 +662,6 @@ class DNeRFNet(torch.nn.Module):
             flow_net_input = torch.cat((global_latent, xyz_flow_in), dim=-1)
             print(flow_net_input.shape, "flow net input")
             flow = self.flow_net(flow_net_input)
-            print(flow.shape, "flow")
             xyz_shifted = xyz_flow_in + flow
             # return xyz_shifted to original size
             xyz_shifted = xyz_shifted.reshape(SB, B, 3)
@@ -695,7 +694,6 @@ class DNeRFNet(torch.nn.Module):
             output_list = [torch.sigmoid(rgb), torch.relu(sigma)]
             output = torch.cat(output_list, dim=-1)
             output = output.reshape(SB, B, -1)
-            flow = flow.reshape(SB, B, 3)
         return output, flow
 
     def load_weights(self, args, opt_init=False, strict=True, device=None):
