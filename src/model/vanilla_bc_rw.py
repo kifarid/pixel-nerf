@@ -109,9 +109,9 @@ class Vanilla_BC_RW(pl.LightningModule):
                     dis_act = torch.argmax(pred[k], dim=-1)
                     if v["min"] == -1:
                         # convert to -1, 1
-                        pred['k'] = dis_act * 2 - 1
+                        pred[k] = dis_act * 2 - 1
                     else:
-                        pred['k'] = dis_act
+                        pred[k] = dis_act
 
         return pred
 
