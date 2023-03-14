@@ -10,5 +10,6 @@ conda activate nerf_rl
 
 #sbatch bc_image_resnet_frozen.sh
 #sbatch bc_image_resnet_bc_obj.sh
-sbatch bc_vanilla.sh
+#sbatch bc_vanilla.sh
+sbatch bc_vanilla_rw.sh
 

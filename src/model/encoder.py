@@ -205,7 +205,7 @@ class ImageEncoder(nn.Module):
             self.model = BasicBackbone()
         elif backbone == "basic2":
             print("creating basic2 backbone")
-            self.model = BasicBackbone2(frame_stack, image_size)
+            self.model = BasicBackbone2(frame_stack, image_size, layer_norm)
         else:
             self.model = getattr(torchvision.models, backbone)(pretrained=pretrained)
 
