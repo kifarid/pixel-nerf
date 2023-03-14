@@ -8,6 +8,8 @@ from src.util import instantiate_from_config
 from src.model.model_util import make_mlp
 from src.model.encoder import ImageEncoder
 
+from src.model.augmentations import RandomShiftsAugNew
+
 
 
 class Vanilla_BC_RW(pl.LightningModule):
@@ -21,10 +23,16 @@ class Vanilla_BC_RW(pl.LightningModule):
                  ckpt_path=None,
                  frame_stack=True,
                  monitor=None,
+                 augment=False,
+                 pad=2,
                  base_learning_rate=1e-4,
+                 discrete_loss_weight=1e-4,
                  ):
         super().__init__()
         self.save_hyperparameters()
+        self.augment = augment
+        if self.augment:
+            self.transform = RandomShiftsAugNew(pad=pad)
         self.frame_stack = frame_stack
         self.scheduler_config = scheduler_config
         self.instantiate_backbone(backbone_config)
@@ -40,16 +48,17 @@ class Vanilla_BC_RW(pl.LightningModule):
         self.cross_entropy_loss = nn.CrossEntropyLoss()
         self.mse_loss = nn.MSELoss()
 
+        self.discrete_loss_weight = discrete_loss_weight
         if monitor is not None:
             self.monitor = monitor
         if ckpt_path is not None:
             self.init_from_ckpt(ckpt_path, ignore_keys=ignore_keys)
 
-    def calc_losses(self, gt, preds):
-        print("gt: ", gt)
+    def calc_losses(self, gt, preds, relative=False, ):
+        #print("gt: ", gt)
         loss_dict = {}
         for k, v in self.action_space.items():
-            print(k, preds[k].shape, gt[k].shape)
+            #print(k, preds[k].shape, gt[k].shape)
             if v["type"] == "discrete":
                 if v["min"] == -1:
                     # if min is -1 then range is -1 to 1
@@ -57,14 +66,14 @@ class Vanilla_BC_RW(pl.LightningModule):
                     #convert to long
                     gt[k] = gt[k].long()
                 if preds[k].shape[:-1] == gt[k].shape:
-                    loss_dict[k] = self.cross_entropy_loss(preds[k], gt[k])
+                    loss_dict[k] = self.discrete_loss_weight*self.cross_entropy_loss(preds[k], gt[k])
                 else:
-                    loss_dict[k] = self.cross_entropy_loss(preds[k], gt[k][:, -1])  # (TODO) make flexible only use last gt
+                    loss_dict[k] = self.discrete_loss_weight*self.cross_entropy_loss(preds[k], gt[k][:, -1])  # (TODO) make flexible only use last gt
             elif v["type"] == "continuous":
                if preds[k].shape == gt[k].shape:
-                    loss_dict[k] = torch.sqrt(self.mse_loss(preds[k], gt[k]))
+                    loss_dict[k] = self.mse_loss(preds[k], gt[k])
                else:
-                loss_dict[k] = torch.sqrt(self.mse_loss(preds[k], gt[k][:, -1]))  # only use last gt
+                loss_dict[k] = self.mse_loss(preds[k], gt[k][:, -1])  # only use last gt
 
         # get mean of the losses
         loss = torch.mean(torch.stack(list(loss_dict.values())))
@@ -124,6 +133,7 @@ class Vanilla_BC_RW(pl.LightningModule):
             preds = self.forward(data)
             loss, loss_dict = self.calc_losses(data["action"], preds)
         # print("\n loss in validati step: ", loss, "\n")
+
         self.log("bc_val_loss", loss, on_step=True, on_epoch=True)
         self.log("bc_val_loss_dict", loss_dict, on_step=True, on_epoch=True)
         self.eval_all_models()
@@ -257,6 +267,11 @@ class Vanilla_BC_RW(pl.LightningModule):
     def get_input(self, batch):
         x = batch  # (SB, NV, T, 3, H, W)
         all_images = x["images"].float()  # (SB, NV, T, 3, H, W)
+        
+        if self.augment:
+            all_images = self.transform(all_images.view(-1, *all_images.shape[-3:])).view(all_images.shape)
+
+
         if len(all_images.shape) == 6:
             SB, NV, T, _, H, W = all_images.shape
         elif len(all_images.shape) == 5:

@@ -162,9 +162,9 @@ class Episode(dict):
         # get the difference between the current and next state
         state_diff = np.linalg.norm(np.diff(state, axis=0), ord=np.inf, axis=1)
         # get first state with diff > 1e-5
-        start_idx = np.argmax(state_diff > 1e-5)
+        start_idx = np.argmax(state_diff > 1e-3)
         # get last state with diff > 1e-5
-        end_idx = len(state_diff) - np.argmax(state_diff[::-1] > 1e-5)
+        end_idx = len(state_diff) - np.argmax(state_diff[::-1] > 1e-3)
         episode = self[start_idx:end_idx]
         for k, v in episode.items():
             self[k] = v
