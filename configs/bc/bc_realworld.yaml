@@ -31,7 +31,7 @@ model:
           type: global
           encode_cam: false
           frame_stack: 2
-
+    augment: true
 data:
   target: main.DataModuleFromConfig
   params:
@@ -44,6 +44,8 @@ data:
       params:
         directory: /Users/kfarid/Desktop/Education/MSc_Freiburg/research/robot_io/expert_data/val #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         frame_stack: 2
+        views:
+
 
     validation:
       target: src.data.RealWorldDataset.TeleopData
@@ -51,7 +53,6 @@ data:
         directory: /Users/kfarid/Desktop/Education/MSc_Freiburg/research/robot_io/expert_data/val #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         frame_stack: 2
         views:
-          - 1
 
     test:
       target: src.data.RealWorldDataset.TeleopData
@@ -59,7 +60,6 @@ data:
         directory: /Users/kfarid/Desktop/Education/MSc_Freiburg/research/robot_io/expert_data/val #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         frame_stack: 2
         views:
-          - 1
 
 
 

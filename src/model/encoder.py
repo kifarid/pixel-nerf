@@ -190,7 +190,7 @@ class ImageEncoder(nn.Module):
     Global image encoder
     """
 
-    def __init__(self, backbone="resnet34", pretrained=True, latent_size=128, encode_cam=True, frame_stack=1, image_size=(150, 200)):
+    def __init__(self, backbone="resnet34", pretrained=True, latent_size=128, encode_cam=True, frame_stack=1, image_size=(150, 200), layer_norm=False):
         """
         :param backbone Backbone network. Assumes it is resnet*
         e.g. resnet34 | resnet50
@@ -307,6 +307,7 @@ class ImageEncoder(nn.Module):
             latent_size=conf.get("latent_size", 128),
             encode_cam=conf.get("encode_cam", True),
             frame_stack=conf.get("frame_stack", 1),
+            layer_norm=conf.get("layer_norm", False),
         )
 
 class FieldEncoder(nn.Module):
@@ -617,7 +618,7 @@ class BasicBackbone(nn.Module):
 
 
 class BasicBackbone2(nn.Module):
-    def __init__(self, frame_stack=1, image_size=(150, 200)):
+    def __init__(self, frame_stack=1, image_size=(150, 200), layer_norm=False):
         super().__init__()
         #create a net work with 5 conv layers
         self.conv1 = nn.Conv2d(3*frame_stack, 32, kernel_size=3, stride=2, bias=False)
@@ -635,8 +636,11 @@ class BasicBackbone2(nn.Module):
                                     )
         self.base_fc = nn.Linear(32*int(image_size[0]/4)*int(image_size[1]/4), 512)
         #add layernorm
-        #self.layernorm = nn.LayerNorm(512)
-        #self.tanh = nn.Tanh()
+        self.layernorm = None
+        if layer_norm:
+            self.layernorm = nn.LayerNorm(512)
+            self.tanh = nn.Tanh()
+
 
     def forward(self, x):
         x = self.conv1(x)
@@ -645,6 +649,9 @@ class BasicBackbone2(nn.Module):
         x = self.layer1(x)
         x = x.view(x.size(0), -1)
         x = self.base_fc(x)
+        if self.layernorm is not None:
+            x = self.layernorm(x)
+            x = self.tanh(x)
         #x = self.layernorm(x)
         #x = self.tanh(x)
         return x

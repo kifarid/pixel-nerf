@@ -8,7 +8,7 @@ from src.util import instantiate_from_config
 from src.model.model_util import make_mlp
 from src.model.encoder import ImageEncoder
 
-
+from src.model.augmentations import RandomShiftsAugNew
 
 class Vanilla_BC_RW(pl.LightningModule):
     # classic imitation learning policy
@@ -21,9 +21,14 @@ class Vanilla_BC_RW(pl.LightningModule):
                  ckpt_path=None,
                  frame_stack=True,
                  monitor=None,
+                 augment=False,
                  base_learning_rate=1e-4,
                  ):
         super().__init__()
+        self.augment = augment
+        if self.augment:
+            self.transform = RandomShiftsAugNew(pad=2)
+
         self.save_hyperparameters()
         self.frame_stack = frame_stack
         self.scheduler_config = scheduler_config
@@ -46,10 +51,8 @@ class Vanilla_BC_RW(pl.LightningModule):
             self.init_from_ckpt(ckpt_path, ignore_keys=ignore_keys)
 
     def calc_losses(self, gt, preds):
-        print("gt: ", gt)
         loss_dict = {}
         for k, v in self.action_space.items():
-            print(k, preds[k].shape, gt[k].shape)
             if v["type"] == "discrete":
                 if v["min"] == -1:
                     # if min is -1 then range is -1 to 1
@@ -257,6 +260,9 @@ class Vanilla_BC_RW(pl.LightningModule):
     def get_input(self, batch):
         x = batch  # (SB, NV, T, 3, H, W)
         all_images = x["images"].float()  # (SB, NV, T, 3, H, W)
+        if self.augment:
+            all_images = self.transform(all_images.view(-1, *all_images.shape[-3:])).view(all_images.shape)
+
         if len(all_images.shape) == 6:
             SB, NV, T, _, H, W = all_images.shape
         elif len(all_images.shape) == 5:

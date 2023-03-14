@@ -46,7 +46,7 @@ class RandomShiftsAug(nn.Module):
 
 
 class RandomShiftsAugNew(nn.Module):
-    def __init__(self, pad=4, consistent=False):
+    def __init__(self, pad=2, consistent=False):
         super().__init__()
         self.pad = pad
         self.consistent = consistent
@@ -76,10 +76,8 @@ class RandomShiftsAugNew(nn.Module):
                                   w + 2 * self.pad,
                                   device=x.device,
                                   dtype=x.dtype)[:w]
-        print(arange_h.shape, arange_w.shape)
         arange_h = arange_h.unsqueeze(1).repeat(1, w).unsqueeze(2)
         arange_w = arange_w.unsqueeze(0).repeat(h, 1).unsqueeze(2)
-        print(arange_h.shape, arange_w.shape)
         base_grid = torch.cat([arange_h, arange_w], dim=2)
         #base_grid = base_grid.unsqueeze(0).repeat(n, 1, 1, 1)
 

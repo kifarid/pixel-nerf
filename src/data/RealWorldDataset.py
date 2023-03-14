@@ -1,21 +1,16 @@
 import glob
 import os
-import matplotlib.pyplot as plt
-import imageio
-import pickle
-import pathlib
+
+import cv2
 import imageio
 import numpy as np
-import tensorflow as tf
 import torch
-from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
-import cv2
-from src.util import get_image_to_tensor_balanced, get_mask_to_tensor, action_dict_to_tensor, dict_to_tensor
 from scipy.spatial.transform.rotation import Rotation as R
-
 # import dataloader
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
+
+from src.util import get_image_to_tensor_balanced, dict_to_tensor
 
 
 def plot_coordinate_frame(image, cam_matrix, frame, length=0.1, thickness=2, wait=True):
@@ -59,7 +54,7 @@ def get_tcp_pose(tcp_pos, tcp_orn):
         tcp_pose[:, :3, 3] = tcp_pos
     else:
         tcp_pose = np.eye(4)
-        tcp_pose[:3, :3] =tcp_rot
+        tcp_pose[:3, :3] = tcp_rot
         tcp_pose[:3, 3] = tcp_pos
 
     return tcp_pose
@@ -71,7 +66,7 @@ def get_cam_matrix(f, c, static_extrinsics):
     :param c: principal point (bs, n_views, 2)
     :param static_extrinsics: static extrinsics (bs, n_views, 4, 4)
     """
-    #construct the intrinsic matrix out of focal length (bs, n_views, 2) and principal cx (bs, n_views) and cy (bs, n_views)
+    # construct the intrinsic matrix out of focal length (bs, n_views, 2) and principal cx (bs, n_views) and cy (bs, n_views)
     if len(f.shape) == 2:
         f = f[None, ...]
         c = c[None, ...]
@@ -134,6 +129,7 @@ def load_episode(episode):
 
     return episode
 
+
 class Episode(dict):
     def __init__(self, data, from_npz=True, filter_repeated=True):
         if from_npz:
@@ -162,9 +158,9 @@ class Episode(dict):
         # get the difference between the current and next state
         state_diff = np.linalg.norm(np.diff(state, axis=0), ord=np.inf, axis=1)
         # get first state with diff > 1e-5
-        start_idx = np.argmax(state_diff > 1e-5)
+        start_idx = np.argmax(state_diff > 1e-3)
         # get last state with diff > 1e-5
-        end_idx = len(state_diff) - np.argmax(state_diff[::-1] > 1e-5)
+        end_idx = len(state_diff) - np.argmax(state_diff[::-1] > 1e-3)
         episode = self[start_idx:end_idx]
         for k, v in episode.items():
             self[k] = v
@@ -253,13 +249,15 @@ class Episode(dict):
 class TeleopData(torch.utils.data.Dataset):
 
     def __init__(self, directory, stage="train", z_near=0.1, z_far=2, frame_rate=1, frame_stack=1,
-                 image_size=(150, 200), world_scale=1.0, views = None,
+                 image_size=(150, 200), relative=True, action_from_next_state=False, world_scale=1.0, views=None,
                  image_scale=1.0, allow_reverse=True, state_keys=None, image_keys=None, ):
 
         self.directory = directory
         self.frame_stack = frame_stack
         self.allow_reverse = allow_reverse
         self.frame_rate = frame_rate
+        self.relative = relative
+        self.action_from_next_state = action_from_next_state
         self.frames_paths = []
         for root, dirs, files in os.walk(self.directory):
             # Collect file paths that match "frame_*" in the current subdirectory
@@ -282,7 +280,6 @@ class TeleopData(torch.utils.data.Dataset):
         self.world_scale = world_scale
 
         self.views = views
-
 
         self.image_to_tensor = get_image_to_tensor_balanced()
         self._coord_trans = torch.diag(
@@ -375,11 +372,29 @@ class TeleopData(torch.utils.data.Dataset):
         self.episode_lengths = [len(ep) for ep in self.episodes]
         self.cumulative_episode_lengths = np.cumsum(self.episode_lengths)
 
-    # def process_action(self, action):
-    #     # process the action
-    #     action = np.array(action)
-    #     action = np.concatenate([action[:, :3], action[:, 3:6] * 0.5, action[:, 6:]], axis=1)
-    #     return action
+    def get_action_from_state(self, next_state, close):
+        '''
+        next_state (dict): next state with tcp_pos, tcp_orn  correspnding to t + frame_rate
+        close (int): 0 or 1 from the current gripper
+        '''
+        action = {}
+        action["pos"] = next_state["tcp_pos"]
+        action["quat"] = next_state["tcp_orn"]
+        action["close"] = close
+        pass
+
+    def get_relative_action(self, current_state, action):
+        '''
+        action (dict): action with pos, quat, close, correspnding to t = t + frame_rate - 1
+        current_state (dict): current state with tcp_pos, tcp_orn  correspnding to t
+        '''
+        # get the relative action
+        relative_action = {}
+        relative_action["pos"] = action["pos"] - current_state["tcp_pos"]
+        relative_action["quat"] = action["quat"] - current_state["tcp_orn"]
+        relative_action["close"] = action["close"]
+
+        return relative_action
 
     def process_cams(self, images, depths=None):
         """
@@ -420,9 +435,14 @@ class TeleopData(torch.utils.data.Dataset):
     def process_sample(self, sample):
         # process the sample
 
-        action = self.process_action(sample['action']['motion'])
+        action_orig = self.process_action(sample['action']['motion'])
+
         ref = torch.tensor(sample["action"]["ref"] == 'abs', dtype=torch.bool)
         robot_state = self.process_state(sample['robot_state'])
+
+        action = self.process_action(sample['sampled_action']['motion'])
+        next_robot_state = self.process_state(sample['next_robot_state'])
+
         images = []
         depths = []
         for key in sorted(sample.keys()):
@@ -439,16 +459,17 @@ class TeleopData(torch.utils.data.Dataset):
                     continue
                 depths.append(sample[key])
 
-        images_shps = [img.shape[-3:-1] for img in images] # (H, W)
-        images_tensor = self.process_cams(images, depths) # (N, T, C, H, W)
+        images_shps = [img.shape[-3:-1] for img in images]  # (H, W)
+        images_tensor = self.process_cams(images, depths)  # (N, T, C, H, W)
         cx, cy, fx, fy, poses = [], [], [], [], []
 
         # intialize the tcp pose as a nx4x4 matrix where n is the number of frames and each 4x4 matrix is identity
-        tcp_pose = get_tcp_pose(sample["robot_state"]["tcp_pos"], sample["robot_state"]["tcp_orn"]) # (T, 4, 4) or (4, 4)
+        tcp_pose = get_tcp_pose(sample["robot_state"]["tcp_pos"],
+                                sample["robot_state"]["tcp_orn"])  # (T, 4, 4) or (4, 4)
         # getting gripper cam info
         intrin_gripper = self.cam_info["gripper_intrinsics"]
         pose_T_tcp_cam = self.cam_info["gripper_extrinsic_calibration"]
-        gripper_poses = torch.tensor(tcp_pose @ pose_T_tcp_cam, dtype=torch.float32) # (T, 4, 4) or (4, 4)
+        gripper_poses = torch.tensor(tcp_pose @ pose_T_tcp_cam, dtype=torch.float32)  # (T, 4, 4) or (4, 4)
 
         scale_x, scale_y = 1, 1
         if images[0].shape[-2:] != self.image_size:
@@ -471,14 +492,13 @@ class TeleopData(torch.utils.data.Dataset):
             fy.append(intrin["fy"] * scale_y)
             poses.append(torch.tensor(pose, dtype=torch.float32))
 
-        poses = torch.stack(poses, dim=0).unsqueeze(1).repeat(1, self.frame_stack, 1, 1) # repeat for frame stack (N, T, 4, 4)
-        gripper_poses = gripper_poses if self.frame_stack > 1 else gripper_poses.unsqueeze(0) # (T, 4, 4)
+        poses = torch.stack(poses, dim=0).unsqueeze(1).repeat(1, self.frame_stack, 1,
+                                                              1)  # repeat for frame stack (N, T, 4, 4)
+        gripper_poses = gripper_poses if self.frame_stack > 1 else gripper_poses.unsqueeze(0)  # (T, 4, 4)
         poses = torch.cat([gripper_poses.unsqueeze(0), poses])
 
         f = torch.tensor([fx, fy], dtype=torch.float32).T
         c = torch.tensor([cx, cy], dtype=torch.float32).T
-        #cx = torch.tensor(cx, dtype=torch.float32)
-        #cy = torch.tensor(cy, dtype=torch.float32)
 
         if self.world_scale != 1.0:
             f *= self.world_scale
@@ -488,19 +508,34 @@ class TeleopData(torch.utils.data.Dataset):
             images_tensor = images_tensor[self.views]
             poses = poses[self.views]
             f = f[self.views]
-            #cx = cx[self.views]
-            #cy = cy[self.views]
+            # cx = cx[self.views]
+            # cy = cy[self.views]
             c = c[self.views]
 
+        if self.action_from_next_state:
+            action = self.get_action_from_state(next_robot_state, close=action_orig['close'])
+
+        if self.relative:
+            # get last robot_state in case of frame stack
+            robot_state_last_t = {}
+            if self.frame_stack > 1:
+                for k in robot_state.keys():
+                    robot_state_last_t[k] = robot_state[k][-1]
+            else:
+                robot_state_last_t = robot_state
+
+            action = self.get_relative_action(robot_state_last_t, action)
+
         result = {
-            "images": images_tensor, #.squeeze(),
-            "poses": poses, #.squeeze(),
-            "f": f, #.squeeze(),
-            #"cx": torch.Tensor(cx).squeeze(),
-            #"cy": torch.Tensor(cy).squeeze(),
-            "c": c, #.squeeze(),
+            "images": images_tensor,  # .squeeze(),
+            "poses": poses,  # .squeeze(),
+            "f": f,  # .squeeze(),
+            # "cx": torch.Tensor(cx).squeeze(),
+            # "cy": torch.Tensor(cy).squeeze(),
+            "c": c,  # .squeeze(),
             "ref": ref,
             "robot_state": robot_state,
+            "action_orig": action_orig,
             "action": action,
             "image_size": torch.tensor(self.image_size, dtype=torch.float32),
             "world_scale": torch.tensor(self.world_scale, dtype=torch.float32),
@@ -515,11 +550,14 @@ class TeleopData(torch.utils.data.Dataset):
         idx_in_ep = index - int(self.cumulative_episode_lengths[ep_index - 1]) if ep_index > 0 else index
         episode = self.episodes[ep_index]
         # TODO test this
-        extra_frames = self.frame_stack -1 if self.frame_stack > 1 else 0
+        extra_frames = self.frame_stack - 1 if self.frame_stack > 1 else 0
         sample = episode[idx_in_ep] if extra_frames == 0 else episode[
-                                                                  idx_in_ep - self.frame_rate * extra_frames:idx_in_ep + 1:self.frame_rate]
+                                                              idx_in_ep - self.frame_rate * extra_frames:idx_in_ep + 1:self.frame_rate]
 
-        #next_sample = episode[int(min(idx_in_ep + self.frame_rate, len(episode) - 1))]
+        idx_next_sample = max(min(idx_in_ep + self.frame_rate, len(episode) - 1), 0)
+        idx_action = max(min(idx_in_ep + self.frame_rate - 1, len(episode) - 1), 0)
+        sample["next_robot_state"] = episode[idx_next_sample]["robot_state"]  # dict of vectors
+        sample["sampled_action"] = episode[idx_action]["action"]  # dict of vectors
         result = self.process_sample(sample)
         result["ep_index"] = torch.tensor(ep_index, dtype=torch.int64)
         result["idx_in_ep"] = torch.tensor(idx_in_ep, dtype=torch.int64)
@@ -529,7 +567,12 @@ class TeleopData(torch.utils.data.Dataset):
         if self.allow_reverse:
             stop = idx_in_ep - 1 if idx_in_ep > 0 else None
             reverse_sample = episode[idx_in_ep] if extra_frames == 0 else episode[
-                                                                              idx_in_ep + extra_frames * self.frame_rate: stop:-self.frame_rate]
+                                                                          idx_in_ep + extra_frames * self.frame_rate: stop:-self.frame_rate]
+            idx_next_sample = max(min(idx_in_ep - self.frame_rate, len(episode) - 1), 0)
+            idx_action = max(min(idx_in_ep - self.frame_rate - 1, len(episode) - 1), 0)
+            reverse_sample["next_robot_state"] = episode[idx_next_sample]["robot_state"]
+            reverse_sample["sampled_action"] = episode[idx_action]["action"]
+
             # reverse_next_sample = episode[max(idx_in_ep - self.frame_rate, 0)]
             reverse_result = self.process_sample(reverse_sample)
             reverse_result = {f"reverse_{key}": value for key, value in reverse_result.items()}
@@ -546,7 +589,9 @@ if __name__ == "__main__":
     dataset = TeleopData(
         "/Users/kfarid/Desktop/Education/MSc_Freiburg/research/robot_io/expert_data/val",
         frame_stack=frame_stack,
+        frame_rate=2,
         views=[1, 2],
+        relative=True,
         # image_size=(128, 128),
         # views_per_scene=3,
         # world_scale=0.1,
@@ -566,42 +611,42 @@ if __name__ == "__main__":
         print(list(sample.keys()))
         # get images
         images = sample["images"]
-        actions = torch.cat([sample["action"]["pos"], sample["action"]["quat"]], axis = -1)
-        act_max = torch.cat([sample["action"]["pos"], sample["action"]["quat"]], axis = -1).max(0)[0].max(0)[0]
-        act_min = torch.cat([sample["action"]["pos"], sample["action"]["quat"]], axis = -1).min(0)[0].min(0)[0]
+        actions = torch.cat([sample["action"]["pos"], sample["action"]["quat"]], axis=-1)
+        act_max = torch.cat([sample["action"]["pos"], sample["action"]["quat"]], axis=-1).max(0)[0].max(0)[0]
+        act_min = torch.cat([sample["action"]["pos"], sample["action"]["quat"]], axis=-1).min(0)[0].min(0)[0]
         actions_min.append(act_min)
         actions_max.append(act_max)
         print(images.shape)
-        last_images = images[0, :, -1, ...] #if frame_stack - 1 else images[0]
-        last_images_all = torch.cat([last_images[j] for j in range(last_images.shape[0])], dim=1) if len(last_images.shape) == 4 else last_images
+        last_images = images[0, :, -1, ...]  # if frame_stack - 1 else images[0]
+        last_images_all = torch.cat([last_images[j] for j in range(last_images.shape[0])], dim=1) if len(
+            last_images.shape) == 4 else last_images
         frame = last_images_all.permute(1, 2, 0).numpy()
         # convert from -1,1 to 0,1 and uint8
         frame = (frame + 1) / 2 * 255
         frames.append(frame.astype(np.uint8))
         if frame_stack - 1:
-            tcp_pos, tcp_orn = sample["robot_state"]["tcp_pos"][0, -1].numpy(), sample["robot_state"]["tcp_orn"][0, -1].numpy()
+            tcp_pos, tcp_orn = sample["robot_state"]["tcp_pos"][0, -1].numpy(), sample["robot_state"]["tcp_orn"][
+                0, -1].numpy()
         else:
-            tcp_pos, tcp_orn = sample["robot_state"]["tcp_pos"][-1].numpy(), sample["robot_state"]["tcp_orn"][-1].numpy()
+            tcp_pos, tcp_orn = sample["robot_state"]["tcp_pos"][-1].numpy(), sample["robot_state"]["tcp_orn"][
+                -1].numpy()
 
         poses = sample["poses"].numpy()[:, :, -1, ...]
         tcp_pose = get_tcp_pose(tcp_pos=tcp_pos, tcp_orn=tcp_orn)
 
         cam_matrix = get_cam_matrix(sample["f"].numpy(), sample["c"].numpy(), poses)
 
-
         last_images_with_pose = []
 
         for j in range(0, last_images.shape[0]):
-            img = (last_images[j].permute(1, 2, 0).numpy()+1)/2 * 255
+            img = (last_images[j].permute(1, 2, 0).numpy() + 1) / 2 * 255
             img = img.astype(np.uint8)
             last_images_with_pose.append(plot_coordinate_frame(img, cam_matrix[0, j], tcp_pose))
         last_images_all = np.concatenate(last_images_with_pose, axis=1)
 
-        #frame_2 = np.transpose(last_images_all, (1, 2, 0))
+        # frame_2 = np.transpose(last_images_all, (1, 2, 0))
         frame_2 = last_images_all.astype(np.uint8)
         frames_2.append(frame_2)
-
-
 
     # create a gif
     imageio.mimsave('test.gif', frames, fps=10)
