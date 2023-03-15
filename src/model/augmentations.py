@@ -1,6 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from src.data.RealWorldDataset import TeleopData
+from torch.utils.data import DataLoader
+from matplotlib import pyplot as plt
+import numpy as np
 
 
 class RandomShiftsAug(nn.Module):
@@ -82,7 +86,7 @@ class RandomShiftsAugNew(nn.Module):
         arange_h = arange_h.unsqueeze(1).repeat(1, w).unsqueeze(2)
         arange_w = arange_w.unsqueeze(0).repeat(h, 1).unsqueeze(2)
         #print(arange_h.shape, arange_w.shape)
-        base_grid = torch.cat([arange_h, arange_w], dim=2)
+        base_grid = torch.cat([arange_w, arange_h], dim=2)
         #base_grid = base_grid.unsqueeze(0).repeat(n, 1, 1, 1)
 
         base_grid = base_grid[None, None, ...].repeat(t, n, 1, 1, 1) if len(x.size()) > 4 else base_grid.unsqueeze(
@@ -102,7 +106,7 @@ class RandomShiftsAugNew(nn.Module):
                                   device=x.device,
                                   dtype=x.dtype)
 
-        shift *= 2.0 / (h + 2 * self.pad)
+        shift *= 1.0 / (h + 2 * self.pad) + 1.0 / (w + 2 * self.pad)
 
         grid = base_grid + shift
         if len(orig_size) > 4:
@@ -125,7 +129,43 @@ class RandomShiftsAugNew(nn.Module):
 
 if __name__ == "__main__":
     random_image_batch = torch.rand(8, 3, 2, 3, 150, 200)
-    random_shifts_aug = RandomShiftsAugNew(4)
+    random_shifts_aug = RandomShiftsAugNew(1)
     random_shifts_aug(random_image_batch.view(8*3*2, 3, 150, 200))
-    random_shifts_aug.consistent = True
-    random_shifts_aug(random_image_batch.view(8, 3*2, 3, 150, 200))
+    # random_shifts_aug.consistent = True
+    # random_shifts_aug(random_image_batch.view(8, 3*2, 3, 150, 200))
+    frame_stack = 10
+    dataset = TeleopData(
+        "/Users/kfarid/Desktop/Education/MSc_Freiburg/research/robot_io/expert_data/val",
+        frame_stack=5,
+        frame_rate=2,
+        views=[1, 2],
+        relative=True,
+        # image_size=(128, 128),
+        # views_per_scene=3,
+        # world_scale=0.1,
+
+    )
+    dataloader = DataLoader(dataset, batch_size=8, shuffle=False, num_workers=0)
+    for i, sample in enumerate(dataloader):
+
+        images_aug_ = sample["images"].view(8*2*5, 3, 150, 200)
+        images_aug_ = random_shifts_aug(images_aug_)
+        # show images
+        images_aug_ = images_aug_.view(8, 2, 5, 3, 150, 200)
+        # convert to numpy
+        print(images_aug_.shape)
+        images_aug_ = images_aug_.permute(0, 1, 2, 4, 5, 3).cpu().numpy()
+        images_view_1 = images_aug_[0, :, :, :, :, :]
+        # add over height
+        print(images_view_1.shape)
+        iv = np.concatenate(images_view_1, axis=2)
+        print(iv.shape)
+        iv = np.concatenate(iv, axis=0)
+        print(iv.shape)
+        images_view_1 = iv
+        plt.imshow(images_view_1)
+        plt.show()
+
+
+
+

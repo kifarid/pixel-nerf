@@ -381,7 +381,7 @@ class TeleopData(torch.utils.data.Dataset):
         action["pos"] = next_state["tcp_pos"]
         action["quat"] = next_state["tcp_orn"]
         action["close"] = close
-        pass
+        return action
 
     def get_relative_action(self, current_state, action):
         '''
@@ -513,7 +513,8 @@ class TeleopData(torch.utils.data.Dataset):
             c = c[self.views]
 
         if self.action_from_next_state:
-            action = self.get_action_from_state(next_robot_state, close=action_orig['close'])
+            close = action_orig['close'] if action_orig['close'].shape[0] == 1 else action_orig['close'][-1]
+            action = self.get_action_from_state(next_robot_state, close=close)
 
         if self.relative:
             # get last robot_state in case of frame stack
@@ -585,11 +586,11 @@ class TeleopData(torch.utils.data.Dataset):
 
 
 if __name__ == "__main__":
-    frame_stack = 2
+    frame_stack = 10
     dataset = TeleopData(
-        "/Users/kfarid/Desktop/Education/MSc_Freiburg/research/robot_io/expert_data/val",
-        frame_stack=frame_stack,
-        frame_rate=2,
+        "/Users/kfarid/Desktop/Education/MSc_Freiburg/research/robot_io/expert_data/train",
+        frame_stack=2,
+        frame_rate=3,
         views=[1, 2],
         relative=True,
         # image_size=(128, 128),

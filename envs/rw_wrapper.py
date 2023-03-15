@@ -19,6 +19,7 @@ from typing import Any, NamedTuple
 import gym
 import numpy as np
 
+
 def get_tcp_pose(tcp_pos, tcp_orn):
     # create gripper pose matrix
     tcp_rot = R.from_quat(tcp_orn).as_matrix()
@@ -37,20 +38,22 @@ def get_tcp_pose(tcp_pos, tcp_orn):
 
 class FrameStackIlWrapper(gym.Env):
 
-    def __init__(self, env, num_frames, relative=True, action_mode="abs"):
+    def __init__(self, env, num_frames, relative=True, frame_rate=1, action_mode="abs"):
         """
         Wrapper for stacking frames
         :param env: environment to wrap
         :param num_frames: number of frames to stack
+        :frame_rate:
         :param relative: if True, actions are relative to the current pose
         :param action_mode: "abs" or "rel" which action mode to use
 
         """
 
         self.cam_info = None
+        self.obs = None
         self._env = env
         self._num_frames = num_frames
-        self.relative == relative
+        self.relative = relative
         self.action_mode = action_mode
 
         self._frames = deque([], maxlen=num_frames)
@@ -105,37 +108,42 @@ class FrameStackIlWrapper(gym.Env):
         # load the camera_info
         camera_info = {}
         if self._env.camera_manager.gripper_cam is not None:
-            camera_info["gripper_extrinsic_calibration"] = self._env.camera_manager.gripper_cam.get_extrinsic_calibration(self._env.camera_manager.robot_name)
+            camera_info[
+                "gripper_extrinsic_calibration"] = self._env.camera_manager.gripper_cam.get_extrinsic_calibration(
+                self._env.camera_manager.robot_name)
             camera_info["gripper_intrinsics"] = self._env.camera_manager.gripper_cam.get_intrinsics()
         if self._env.camera_manager.static_cam is not None:
             if self._env.camera_manager.static_cam_count > 1:
-                camera_info["static_extrinsic_calibration"] = tuple()
-                camera_info["static_intrinsics"] = tuple()
+                camera_info["static_extrinsic_calibration"] = []
+                camera_info["static_intrinsics"] = []
                 for cam in self._env.camera_manager.static_cam:
-                    camera_info["static_extrinsic_calibration"] += (cam.get_extrinsic_calibration(self._env.camera_manager.robot_name),)
-                    camera_info["static_intrinsics"] += (cam.get_intrinsics(),)
+                    camera_info["static_extrinsic_calibration"].append(
+                        cam.get_extrinsic_calibration(self._env.camera_manager.robot_name))
+                    camera_info["static_intrinsics"].append(cam.get_intrinsics())
             else:
-                camera_info["static_extrinsic_calibration"] = self._env.camera_manager.static_cam.get_extrinsic_calibration(self._env.camera_manager.robot_name)
+                camera_info[
+                    "static_extrinsic_calibration"] = self._env.camera_manager.static_cam.get_extrinsic_calibration(
+                    self._env.camera_manager.robot_name)
                 camera_info["static_intrinsics"] = self._env.camera_manager.static_cam.get_intrinsics()
 
         self.cam_info = camera_info
 
         # build the intrinisic matrix for all cameras
         static_intrinsic = self.cam_info["static_intrinsics"]
-        self.cam_info["static_intrinsics"] = self.build_intrinsics(static_intrinsic[None][0])
+        self.cam_info["static_intrinsics"] = self.build_intrinsics(static_intrinsic)
         # create the camera matrix from the intrinsics
 
         # repeat for the dynamic camera
         dynamic_intrinsic = self.cam_info["gripper_intrinsics"]
-        self.cam_info["gripper_intrinsics"] = self.build_intrinsics(dynamic_intrinsic[None][0])
+        self.cam_info["gripper_intrinsics"] = self.build_intrinsics(dynamic_intrinsic)
         return self.cam_info
 
     def _transform_observation(self, result):
         assert len(self._frames) == self._num_frames
         assert len(self._poses) == self._num_frames
 
-        obs = torch.cat(list(self._frames), axis=1) # (NV, T, C, H, W)
-        poses = torch.cat(list(self._poses), axis=1) # (NV, T, 4, 4)
+        obs = torch.cat(list(self._frames), axis=1)  # (NV, T, C, H, W)
+        poses = torch.cat(list(self._poses), axis=1)  # (NV, T, 4, 4)
 
         result["images"] = obs
         result["poses"] = poses
@@ -148,10 +156,10 @@ class FrameStackIlWrapper(gym.Env):
         for _ in range(self._num_frames):
             self._frames.append(obs["images"])
             self._poses.append(obs["poses"])
+        self.obs = self._transform_observation(obs)
+        return self.obs
 
-        return self._transform_observation(obs)
-
-    def get_abs_action(self, current_state, action):
+    def get_abs_action(self, action, current_state):
         '''
         action (dict): action with pos, quat, close relative
         current_state (dict): current state with tcp_pos, tcp_orn  correspnding to t
@@ -164,7 +172,7 @@ class FrameStackIlWrapper(gym.Env):
 
         return abs_action
 
-    def get_rel_action(self, current_state, action):
+    def get_rel_action(self, action, current_state):
         '''
         action (dict): action with pos, quat, close abs
         current_state (dict): current state with tcp_pos, tcp_orn  correspnding to t
@@ -195,20 +203,26 @@ class FrameStackIlWrapper(gym.Env):
         """
 
         action_processed = {}
-        action_processed["ref"] = self.action_mode
 
         for key in action.keys():
-                action_processed[key] = action[key].squeeze().detach().cpu().numpy() if key in action else 0
+            action_processed[key] = action[key].squeeze().detach().cpu().numpy() if key in action else 0
 
         # check if relative is true then add current pose
+        robot_state = copy.deepcopy(self.obs["robot_state"])
+        # convert the state to array from tensor
+        for key in robot_state.keys():
+            robot_state[key] = robot_state[key].squeeze().detach().cpu().numpy()
 
         if self.relative and self.action_mode == "abs":
-            action_processed=self.get_abs_action(self._env.get_obs()["robot_state"], action_processed)
+            action_processed = self.get_abs_action(action_processed,robot_state)
 
         elif not self.relative and self.action_mode == "rel":
-            action_processed=self.get_rel_action(self._env.get_obs()["robot_state"], action_processed)
+            action_processed = self.get_rel_action(action_processed, robot_state)
 
-        return action_processed
+        action = {}
+        action["motion"] = (action_processed["pos"], action_processed["quat"], action_processed["close"])
+        action["ref"] = self.action_mode
+        return action
 
     def process_cams(self, images, depths=None):
         """
@@ -240,7 +254,6 @@ class FrameStackIlWrapper(gym.Env):
 
     def process_obs(self, obs):
         # process the sample
-
         robot_state = self.process_state(obs['robot_state'])
 
         images = []
@@ -322,10 +335,11 @@ class FrameStackIlWrapper(gym.Env):
 
     def step(self, action):
         action = self.process_action(action)
-        next_obs, _, _, _ = self._env.step(action)
+        for _ in range(self.frame_rate):
+            next_obs, _, _, _ = self._env.step(action)
         next_obs = self.process_obs(next_obs)
 
         self._frames.append(next_obs["images"])
         self._poses.append(next_obs["poses"])
-
-        return self._transform_observation(next_obs)
+        self.obs = self._transform_observation(next_obs)
+        return self.obs
