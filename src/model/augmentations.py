@@ -8,12 +8,15 @@ import numpy as np
 
 
 class RandomShiftsAug(nn.Module):
-    def __init__(self, pad):
+    def __init__(self, pad, prob=0.5):
         super().__init__()
         self.pad = pad
+        self.prob = prob
 
     @torch.no_grad()
     def forward(self, x):
+        if torch.rand(1) > self.prob:
+            return x
         n, c, h, w = x.size()
         #assert h == w
         padding = tuple([self.pad] * 4)

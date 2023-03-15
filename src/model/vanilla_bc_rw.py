@@ -267,7 +267,8 @@ class Vanilla_BC_RW(pl.LightningModule):
         x = batch  # (SB, NV, T, 3, H, W)
         all_images = x["images"].float()  # (SB, NV, T, 3, H, W)
 
-        if self.augment:
+        #apply only in training
+        if self.augment and self.training:
             all_images = self.transform(all_images.view(-1, *all_images.shape[-3:])).view(all_images.shape)
 
 
