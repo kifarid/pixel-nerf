@@ -17,24 +17,23 @@ model:
         quat:
           type: "continuous"
           size: 4
-          min: -1.0
-          max: 1.0
+          min: -2.1
+          max: 2.1
         close:
           type: "discrete"
           size: 2
           min: -1.0
-        # acts_left:
-        #     type: "discrete"
-        #     size: 1000
+ 
     backbone_config:
           backbone: basic2
           type: global
           encode_cam: false
           frame_stack: 3
           layer_norm: true
-    augment: true
+    augment: false
     discrete_loss_weight: 1e-6
     pad: 2
+
 data:
   target: main.DataModuleFromConfig
   params:
@@ -47,8 +46,11 @@ data:
       params:
         directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/train #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         frame_stack: 3
+        relative: false
+        frame_rate: 1
         views:
           - 1
+          - 2
 
         #  - 1
 
@@ -57,8 +59,11 @@ data:
       params:
         directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/val #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         frame_stack: 3
+        frame_rate: 1
+        relative: false
         views:
           - 1
+          - 2
 
         #  - 1
 
@@ -67,8 +72,11 @@ data:
       params:
         directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/val #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         frame_stack: 3
+        frame_rate: 1
+        relative: false
         views:
           - 1
+          - 2
 
         #  - 1
 
