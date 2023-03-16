@@ -65,14 +65,14 @@ class Vanilla_BC_RW(pl.LightningModule):
                     #convert to long
                     gt[k] = gt[k].long()
                 if preds[k].shape[:-1] == gt[k].shape:
-                    loss_dict[k] = self.discrete_loss_weight*self.cross_entropy_loss(preds[k], gt[k])
+                    loss_dict[k] = v["weight"]*self.cross_entropy_loss(preds[k], gt[k])
                 else:
-                    loss_dict[k] = self.discrete_loss_weight*self.cross_entropy_loss(preds[k], gt[k][:, -1])  # (TODO) make flexible only use last gt
+                    loss_dict[k] = v["weight"]*self.discrete_loss_weight*self.cross_entropy_loss(preds[k], gt[k][:, -1])  # (TODO) make flexible only use last gt
             elif v["type"] == "continuous":
                if preds[k].shape == gt[k].shape:
-                    loss_dict[k] = self.mse_loss(preds[k], gt[k])
+                    loss_dict[k] = v["weight"]*self.mse_loss(preds[k], gt[k])
                else:
-                loss_dict[k] = self.mse_loss(preds[k], gt[k][:, -1])  # only use last gt
+                loss_dict[k] = v["weight"]*self.mse_loss(preds[k], gt[k][:, -1])  # only use last gt
 
         # get mean of the losses
         loss = torch.mean(torch.stack(list(loss_dict.values())))
@@ -97,11 +97,20 @@ class Vanilla_BC_RW(pl.LightningModule):
 
         return preds
 
+    def move_to_device(self, data, device):
+        # move data dict to device
+        for k, v in data.items():
+            if isinstance(v, dict):
+                data[k] = self.move_to_device(v, device)
+            else:
+                data[k] = v.to(device)
+        return data
     def step(self, data):
         # data should have first dim as batch
         # move the data dict to the device of the model,
         with torch.no_grad():
-            data = {k: v.to(self.device) for k, v in data.items()}
+            #recursive move to device
+            data = self.move_to_device(data, self.device)
             pred = self.forward(data)
             for k, v in self.action_space.items():
                 # check if discrete then return max index along last dim
@@ -269,6 +278,7 @@ class Vanilla_BC_RW(pl.LightningModule):
 
         #apply only in training
         if self.augment and self.training:
+            #print("Augmenting images!")
             all_images = self.transform(all_images.view(-1, *all_images.shape[-3:])).view(all_images.shape)
 
 

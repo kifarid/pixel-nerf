@@ -27,3 +27,4 @@ logs_bc/bc_image_resnet_frozen.sh.dlcgpu05.1159528.3.1159528.out
 envs/ravens/
 envs/ravens
 logs_rw/
+outputs/

@@ -15,7 +15,7 @@ export SEED=${AR[$SLURM_ARRAY_TASK_ID]}
 
 echo "Started at $(date)";
 echo "Running job $SLURM_JOB_NAME and $SLURM_ARRAY_TASK_ID using $SLURM_JOB_CPUS_PER_NODE cpus per node with given JID $SLURM_JOB_ID on queue $SLURM_JOB_PARTITION and seed $SEED;" ;
-export EXP_NAME=rw_bc_vanilla_augment_0_rate_1_abs_nviews_2
+export EXP_NAME=rw_bc_vanilla_augment_1_rate_3_abs_views_2
 source ~/.bashrc                                                                                                                                                                         
 conda activate nerf_rl
 echo "activated env"
