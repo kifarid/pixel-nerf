@@ -8,7 +8,7 @@ import numpy as np
 
 
 class RandomShiftsAug(nn.Module):
-    def __init__(self, pad, prob=0.5):
+    def __init__(self, pad, prob=0.2):
         super().__init__()
         self.pad = pad
         self.prob = prob

@@ -2,9 +2,11 @@ model:
   target: src.model.vanilla_bc_rw.Vanilla_BC_RW
 
   params:
+    ckpt_path: /work/dlclarge2/faridk-nerf_il/logs/bc_rw/2023-03-15T14-35-07_rw_bc_vanilla_augment_0_rate_2_rel_nviews_2/checkpoints/last.ckpt  
+
     model_config:
-      base_learning_rate: 1e-4
       type: basic
+      base_learning_rate: 1e-4
       d_out: 128
       n_hidden: 5
       d_hidden: 128
@@ -14,18 +16,15 @@ model:
           size: 3
           min: -1.0
           max: 1.0
-          weight: 3.0
         quat:
           type: "continuous"
           size: 4
           min: -2.1
           max: 2.1
-          weight: 1.0
         close:
           type: "discrete"
           size: 2
           min: -1.0
-          weight: 1e-6
  
     backbone_config:
           backbone: basic2
@@ -34,25 +33,28 @@ model:
           frame_stack: 3
           layer_norm: true
     augment: true
-    pad: 1
+    discrete_loss_weight: 1e-6
+    pad: 2
 
 data:
   target: main.DataModuleFromConfig
   params:
 
     batch_size: 128
-    num_workers: 4
+    num_workers: 1
     wrap: True
     train:
       target: src.data.RealWorldDataset.TeleopData
       params:
         directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/train #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         frame_stack: 3
-        relative: false
+        relative: true
         frame_rate: 3
         views:
+
           - 1
           - 2
+          - 0
 
         #  - 1
 
@@ -62,10 +64,11 @@ data:
         directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/val #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         frame_stack: 3
         frame_rate: 3
-        relative: false
+        relative: true
         views:
           - 1
           - 2
+          - 0
           
 
         #  - 1
@@ -76,10 +79,11 @@ data:
         directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/val #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         frame_stack: 3
         frame_rate: 3
-        relative: false
+        relative: true
         views:
           - 1
           - 2
+          - 0
 
         #  - 1
 
