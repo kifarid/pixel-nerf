@@ -28,8 +28,15 @@ class NeRFAE(pl.LightningModule):
             print("Encoder frozen")
             if model_config.use_encoder:
                 self.net.encoder.eval()
+                # freeze encoder
+                for param in self.net.encoder.parameters():
+                    param.requires_grad = False
+
             if model_config.use_global_encoder:
                 self.net.global_encoder.eval()
+                # freeze encoder
+                for param in self.net.global_encoder.parameters():
+                    param.requires_grad = False
 
         self.lambda_coarse = loss_config.get("lambda_coarse")
         self.lambda_fine = loss_config.get("lambda_fine", 1.0)
