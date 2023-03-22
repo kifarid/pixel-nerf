@@ -49,7 +49,7 @@ data:
         directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/train #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         frame_stack: 3
         relative: false
-        frame_rate: 3
+        frame_rate: 2
         views:
           - 1
           - 2
@@ -59,9 +59,9 @@ data:
     validation:
       target: src.data.RealWorldDataset.TeleopData
       params:
-        directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/val #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/train #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         frame_stack: 3
-        frame_rate: 3
+        frame_rate: 2
         relative: false
         views:
           - 1
@@ -75,7 +75,7 @@ data:
       params:
         directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/val #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
         frame_stack: 3
-        frame_rate: 3
+        frame_rate: 2
         relative: false
         views:
           - 1
