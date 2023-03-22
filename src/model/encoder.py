@@ -55,6 +55,7 @@ class SpatialEncoder(nn.Module):
         if norm_type != "batch":
             assert not pretrained
 
+        self.backbone = backbone
         self.use_custom_resnet = backbone == "custom"
         self.feature_scale = feature_scale
         self.use_first_pool = use_first_pool
@@ -116,12 +117,19 @@ class SpatialEncoder(nn.Module):
             )
             return samples[:, :, :, 0]  # (B, C, N)
 
-    def forward(self, x):
+    def process_input(self, x):
         """
-        For extracting ResNet's features.
+        Preprocess image input
         :param x image (B, C, H, W)
-        :return latent (B, latent_size, H, W)
+        :return x image (B, C, H, W)
         """
+        #check if backbone is resnet
+        if 'resnet' in self.backbone:
+            # normalize image
+            print("normalizing image for resnet")
+            mean, std = torch.tensor([0.485, 0.456, 0.406]), torch.tensor([0.229, 0.224, 0.225])
+            x = (x - mean[None, :, None, None]) / std[None, :, None, None]
+
         if self.feature_scale != 1.0:
             x = F.interpolate(
                 x,
@@ -131,6 +139,17 @@ class SpatialEncoder(nn.Module):
                 recompute_scale_factor=True,
             )
         x = x.to(device=self.latent.device)
+
+        return x
+
+    def forward(self, x):
+        """
+        For extracting ResNet's features.
+        :param x image (B, C, H, W)
+        :return latent (B, latent_size, H, W)
+        """
+
+        x = self.process_input(x)
 
         if self.use_custom_resnet:
             self.latent = self.model(x)

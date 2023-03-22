@@ -27,6 +27,15 @@ class PixelNeRFNet(torch.nn.Module):
             self.encoder = make_encoder(conf["encoder"])
             self.encoder_type = conf.encoder.get("type", "spatial")
 
+        self.double_encoder = conf.get("double_encoder", False)
+        if self.double_encoder:
+            # freeze the first encoder
+            print("Freezing the first encoder for the double encoder approach")
+            for param in self.encoder.parameters():
+                param.requires_grad = False
+            self.encoder2 = make_encoder(conf["encoder"])
+            self.encoder2_type = conf.encoder.get("type", "spatial")
+
         self.use_xyz = conf.get("use_xyz", False)
 
         assert self.use_encoder or self.use_xyz  # Must use some feature..
@@ -52,6 +61,7 @@ class PixelNeRFNet(torch.nn.Module):
         self.use_global_encoder = conf.get("use_global_encoder", False)
 
         d_latent = self.encoder.latent_size if self.use_encoder else 0
+        d_latent = 2 * d_latent if self.double_encoder else d_latent
         d_in = 3 if self.use_xyz else 1
 
         if self.use_viewdirs and self.use_code_viewdirs:
@@ -156,6 +166,8 @@ class PixelNeRFNet(torch.nn.Module):
 
         if self.use_encoder:
             self.encoder(images)
+        if self.double_encoder:
+            self.encoder2(images)
         if self.use_global_encoder:
             self.global_encoder(images)
 
@@ -320,12 +332,24 @@ class PixelNeRFNet(torch.nn.Module):
                 latent = self.encoder.index(
                     uv, None, self.image_shape
                 )  # (SB * NS, latent, B)
-
+                if self.double_encoder:
+                    latent = self.encoder2.index(
+                        uv, None, self.image_shape
+                    )
                 if self.stop_encoder_grad:
                     latent = latent.detach()
                 latent = latent.transpose(1, 2).reshape(
                     -1, self.encoder_latent_size
                 )  # (SB * NS * B, latent)
+
+                if self.double_encoder:
+                    latent_2 = self.encoder2.index(
+                        uv, None, self.image_shape
+                    )
+                    latent_2 = latent_2.transpose(1, 2).reshape(
+                        -1, self.encoder_latent_size
+                    )
+                    latent = torch.cat((latent, latent_2), dim=-1)
 
                 if self.d_in == 0:
                     # z_feature not needed
