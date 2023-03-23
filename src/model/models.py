@@ -139,8 +139,12 @@ class PixelNeRFNet(torch.nn.Module):
             # Vector f: fx = fy = f_i *for view i*
             # Length should match NS (or 1 for broadcast)
             focal = focal.unsqueeze(-1).repeat((1, 2))
-        else:
+        elif len(focal.shape) == 2:
             focal = focal.clone()
+        elif len(focal.shape) == 3:
+            # (N, NS, 2)
+            focal = focal.reshape(-1, 2)
+
         self.focal = focal.float()
         self.focal[..., 1] *= -1.0
 
@@ -153,6 +157,12 @@ class PixelNeRFNet(torch.nn.Module):
         elif len(c.shape) == 1:
             # Vector c: cx = cy = c_i *for view i*
             c = c.unsqueeze(-1).repeat((1, 2))
+        elif len(c.shape) == 2:
+            c = c.clone()
+        elif len(c.shape) == 3:
+            # (N, NS, 2)
+            c = c.reshape(-1, 2)
+
         self.c = c
 
         if self.use_global_encoder:
@@ -183,10 +193,11 @@ class PixelNeRFNet(torch.nn.Module):
 
         uv *= repeat_interleave(
             self.focal.unsqueeze(1), NS if self.focal.shape[0] > 1 else 1
-        )
+        ) if uv.shape[0] != self.focal.shape[0] else self.focal.unsqueeze(1)
         uv += repeat_interleave(
             self.c.unsqueeze(1), NS if self.c.shape[0] > 1 else 1
-        )  # (SB*NS, B, 2)
+        ) if uv.shape[0]!=self.c.shape[0] else self.c.unsqueeze(1)
+        # (SB*NS, B, 2)
         return uv
 
     def transform_to_local(self, xyz):
@@ -545,8 +556,12 @@ class DNeRFNet(torch.nn.Module):
             # Vector f: fx = fy = f_i *for view i*
             # Length should match NS (or 1 for broadcast)
             focal = focal.unsqueeze(-1).repeat((1, 2))
-        else:
+        elif len(focal.shape) == 2:
             focal = focal.clone()
+        elif len(focal.shape) == 3:
+            # (N, NS, 2)
+            focal = focal.reshape(-1, 2)
+
         self.focal = focal.float()
         self.focal[..., 1] *= -1.0
 
@@ -559,8 +574,13 @@ class DNeRFNet(torch.nn.Module):
         elif len(c.shape) == 1:
             # Vector c: cx = cy = c_i *for view i*
             c = c.unsqueeze(-1).repeat((1, 2))
-        self.c = c
+        elif len(c.shape) == 2:
+            c = c.clone()
+        elif len(c.shape) == 3:
+            # (N, NS, 2)
+            c = c.reshape(-1, 2)
 
+        self.c = c
         self.pass_to_global_encoder(poses=self.poses,
                                     c=self.c,
                                     focal=self.focal,
@@ -581,10 +601,11 @@ class DNeRFNet(torch.nn.Module):
 
         uv *= repeat_interleave(
             self.focal.unsqueeze(1), NS if self.focal.shape[0] > 1 else 1
-        )
+        ) if uv.shape[0] != self.focal.shape[0] else self.focal
         uv += repeat_interleave(
             self.c.unsqueeze(1), NS if self.c.shape[0] > 1 else 1
-        )  # (SB*NS, B, 2)
+        ) if uv.shape[0] != self.c.shape[0] else self.c
+
         return uv
 
     def transform_to_local(self, xyz):

@@ -126,10 +126,11 @@ class SpatialEncoder(nn.Module):
         #check if backbone is resnet
         if 'resnet' in self.backbone:
             # normalize image
+            x = x*0.5 + 0.5
             mean = torch.tensor([0.485, 0.456, 0.406]).to(x.device)
             std = torch.tensor([0.229, 0.224, 0.225]).to(x.device)
             x = (x - mean[None, :, None, None]) / std[None, :, None, None]
-
+        #TODO add other backbones preprocessing including clip
         if self.feature_scale != 1.0:
             x = F.interpolate(
                 x,

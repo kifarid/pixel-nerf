@@ -529,8 +529,8 @@ class TeleopData(torch.utils.data.Dataset):
 
         result = {
             "images": images_tensor,  # .squeeze(),
-            "poses": poses,  # .squeeze(),
-            "f": f,  # .squeeze(),
+            "poses": poses@self._coord_trans,  # .squeeze(),
+            "focal": f,  # .squeeze(),
             # "cx": torch.Tensor(cx).squeeze(),
             # "cy": torch.Tensor(cy).squeeze(),
             "c": c,  # .squeeze(),
