@@ -89,10 +89,10 @@ class NeRFAE(pl.LightningModule):
         all_images = data["images"]  # .to(device=device)  # (SB, NV, 3, H, W) or  (SB, T, NV, 3, H, W)
 
         if len(all_images.shape) > 5:
-            all_images = data["images"][:, -1, ...]
+            all_images = data["images"][:, :, -1, ...]
 
         SB, NV, _, H, W = all_images.shape
-        all_poses = data["poses"][:, -1, ...]  if len(data["poses"].shape) > 4 else data["poses"] #.to(device=device)  # (SB, NV, 4, 4)
+        all_poses = data["poses"][:, :, -1, ...] if len(data["poses"].shape) > 4 else data["poses"] #.to(device=device)  # (SB, NV, 4, 4)
         all_bboxes = data.get("bbox", None)  # (SB, NV, 4)  cmin rmin cmax rmax
         all_focals = data["focal"]  # (SB)
         all_c = data.get("c")  # (SB)
@@ -242,8 +242,8 @@ class NeRFAE(pl.LightningModule):
             print(idx)
             batch_idx = idx
 
-        images = data["images"][batch_idx, -1] if len(data["images"].shape) >5 else data["images"][batch_idx, -1] # .to(device=device)  # (NV, 3, H, W)
-        poses = data["poses"][batch_idx, -1] if len(data["poses"].shape) > 4 else data["poses"][batch_idx]  # .to(device=device)  # (NV, 4, 4)
+        images = data["images"][batch_idx, :,  -1] if len(data["images"].shape) >5 else data["images"][batch_idx, -1] # .to(device=device)  # (NV, 3, H, W)
+        poses = data["poses"][batch_idx, :, -1] if len(data["poses"].shape) > 4 else data["poses"][batch_idx]  # .to(device=device)  # (NV, 4, 4)
         focal = data["focal"][batch_idx: batch_idx + 1]  # (1)
         c = data.get("c")
         if c is not None:
