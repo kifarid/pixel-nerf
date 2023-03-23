@@ -71,7 +71,7 @@ data:
     train:
       target: src.data.RavensDataset.RDataset
       params:
-        path:  data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/data/block_insertion_62/block_insertion
+        path:  /work/dlclarge2/faridk-nerf_il/data/block_insertion/block_insertion
         stage: train
         views_per_scene: 3
         z_near: 0.01
@@ -80,7 +80,7 @@ data:
     validation:
       target: src.data.RavensDataset.RDataset
       params:
-        path: data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/data/block_insertion_62/block_insertion
+        path: /work/dlclarge2/faridk-nerf_il/data/block_insertion/block_insertion
         stage: val
         views_per_scene: 3
         z_near: 0.01
@@ -89,8 +89,8 @@ data:
     test:
       target: src.data.RavensDataset.RDataset
       params:
-        path: data/block_insertion/block_insertion #/work/dlclarge2/faridk-nerf_rl/data/block_insertion_62/block_insertion
-        stage: test
+        path: /work/dlclarge2/faridk-nerf_il/data/block_insertion/block_insertion
+        stage: val
         views_per_scene: 3
         z_near: 0.01
         z_far: 1.6
@@ -116,10 +116,10 @@ lightning:
     benchmark: True
     log_every_n_steps: 20
     accumulate_grad_batches: 1
-    #devices: 0,
-    #accelerator: "gpu"
-    limit_train_batches: 4
-    limit_val_batches: 2
+    devices: 0,
+    accelerator: "gpu"
+    # limit_train_batches: 4
+    # limit_val_batches: 2
     # limit_test_batches: 10
     max_epochs: 500
 #    print_interval: 2

@@ -18,9 +18,9 @@ source ~/.bashrc
 conda activate nerf_rl
 echo "activated env"
 
-export EXP_NAME=train_bb_block_insert_spatial_mask'_'$SLURM_ARRAY_TASK_ID
+export EXP_NAME=train_bb_block_insert_spatial_mask_double'_'$SLURM_ARRAY_TASK_ID
 python -m main -n $EXP_NAME \
---base configs/default_mv_lgn.yaml configs/exp/ravens_spatial.yaml \
+--base configs/default_mv_lgn.yaml configs/exp/ravens_spatial_double.yaml \
 -t \
 -l /work/dlclarge2/faridk-nerf_il/logs/backbones \
 -s $SLURM_ARRAY_TASK_ID

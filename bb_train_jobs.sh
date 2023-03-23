@@ -9,6 +9,7 @@ source ~/.bashrc
 #sbatch train_bb_block_insert_global_image_dnerf.sh
 #sbatch train_bb_block_insert_global_image_multi.sh
 sbatch train_bb_block_insert_spatial.sh
+sbatch train_bb_block_insert_spatial_double.sh
 #sbatch train_bb_block_insert_field.sh
 #sbatch train_bb_block_insert_global_image.sh
 #sbatch train_bb_block_insert_global_image_frozen.sh

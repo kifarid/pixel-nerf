@@ -10,7 +10,7 @@ model:
       z_near: ${data.params.train.params.z_near}
       gpus:
       ray_batch_size: 128 #1024
-      vic_radius: 0.0004 #0.001 #0.001
+      vic_radius: 0 #0.001 #0.001
     model_config:
       # MLP architecture
       # Adapted for multiview
@@ -60,7 +60,7 @@ model:
         init_epoch: 5
       lambda_coarse: 1.0
       lambda_fine: 1.0
-      lambda_vic: 0.01
+      lambda_vic: 0
 
 data:
   target: main.DataModuleFromConfig
@@ -70,7 +70,7 @@ data:
     train:
       target: src.data.RavensDataset.RDataset
       params:
-        path:  /work/dlclarge2/faridk-nerf_rl/data/block_insertion_62/block_insertion
+        path:  /work/dlclarge2/faridk-nerf_il/data/block_insertion/block_insertion
         stage: train
         views_per_scene: 3
         z_near: 0.01
@@ -79,7 +79,7 @@ data:
     validation:
       target: src.data.RavensDataset.RDataset
       params:
-        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion_62/block_insertion
+        path: /work/dlclarge2/faridk-nerf_il/data/block_insertion/block_insertion
         stage: val
         views_per_scene: 3
         z_near: 0.01
@@ -88,8 +88,8 @@ data:
     test:
       target: src.data.RavensDataset.RDataset
       params:
-        path: /work/dlclarge2/faridk-nerf_rl/data/block_insertion_62/block_insertion
-        stage: test
+        path: /work/dlclarge2/faridk-nerf_il/data/block_insertion/block_insertion
+        stage: val
         views_per_scene: 3
         z_near: 0.01
         z_far: 1.6
