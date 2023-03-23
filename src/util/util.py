@@ -181,12 +181,30 @@ def unproj_map(width, height, f, c=None, device="cpu"):
         f = f[None].expand(2)
     elif len(f.shape) == 1:
         f = f.expand(2)
-    Y, X = torch.meshgrid(
-        torch.arange(height, dtype=torch.float32) - float(c[1]),
-        torch.arange(width, dtype=torch.float32) - float(c[0]),
-    )
-    X = X.to(device=device) / float(f[0])
-    Y = Y.to(device=device) / float(f[1])
+
+    if len(f.shape) == 1:
+        Y, X = torch.meshgrid(
+            torch.arange(height, dtype=torch.float32) - float(c[1]),
+            torch.arange(width, dtype=torch.float32) - float(c[0]),
+        )
+        X = X.to(device=device) / float(f[0])
+        Y = Y.to(device=device) / float(f[1])
+
+    elif len(f.shape) == 2:
+        X, Y = [], []
+        for view in range(f.shape[0]):
+            Y_v, X_v = torch.meshgrid(
+                torch.arange(height, dtype=torch.float32) - c[view, 1],
+                torch.arange(width, dtype=torch.float32) - c[view, 0])
+
+            X_v = X_v.to(device=device) / f[view, 0]
+            Y_v = Y_v.to(device=device) / f[view, 1]
+            X.append(X_v)
+            Y.append(Y_v)
+        X = torch.stack(X, dim=0)
+        Y = torch.stack(Y, dim=0)
+
+
     Z = torch.ones_like(X)
     unproj = torch.stack((X, -Y, -Z), dim=-1)
     unproj /= torch.norm(unproj, dim=-1).unsqueeze(-1)
@@ -294,15 +312,25 @@ def gen_rays(poses, width, height, focal, z_near, z_far, c=None, ndc=False, boun
     """
     num_images = poses.shape[0]
     device = poses.device
-    cam_unproj_map = (
-        unproj_map(width, height, focal.squeeze(), c=c, device=device)
-        .unsqueeze(0)
-        .repeat(num_images, 1, 1, 1)
-    )
+
+    if len(focal.shape) < 2:
+        cam_unproj_map = (
+            unproj_map(width, height, focal.squeeze(), c=c, device=device)
+            .unsqueeze(0)
+            .repeat(num_images, 1, 1, 1)
+        )
+    else:
+        # corresponds to different cams for each image
+        cam_unproj_map = (
+            unproj_map(width, height, focal.squeeze(), c=c, device=device)
+        )
+
     cam_centers = poses[:, None, None, :3, 3].expand(-1, height, width, -1)
     cam_raydir = torch.matmul(
         poses[:, None, None, :3, :3], cam_unproj_map.unsqueeze(-1)
     )[:, :, :, :, 0]
+
+
     if ndc:
         if not (z_near == 0 and z_far == 1):
             warnings.warn(
@@ -324,8 +352,8 @@ def gen_rays(poses, width, height, focal, z_near, z_far, c=None, ndc=False, boun
         .expand(num_images, height, width, -1)
     )
     if bound_floor:
-        z_far_test = (-1*cam_centers[...,-1]/cam_raydir[...,-1])[..., None]
-        cam_fars = torch.where(z_far_test<cam_fars, z_far_test, cam_fars)
+        z_far_test = (-1*cam_centers[..., -1]/cam_raydir[..., -1])[..., None]
+        cam_fars = torch.where(z_far_test < cam_fars, z_far_test, cam_fars)
     return torch.cat(
         (cam_centers, cam_raydir, cam_nears, cam_fars), dim=-1
     )  # (B, H, W, 8)

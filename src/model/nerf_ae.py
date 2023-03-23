@@ -86,11 +86,14 @@ class NeRFAE(pl.LightningModule):
     def calc_losses(self, data, is_train=True):
         if "images" not in data:
             return {}
-        all_images = data["images"]  # .to(device=device)  # (SB, NV, 3, H, W)
+        all_images = data["images"]  # .to(device=device)  # (SB, NV, 3, H, W) or  (SB, T, NV, 3, H, W)
+
+        if len(all_images.shape) > 5:
+            all_images = data["images"][:, -1, ...]
 
         SB, NV, _, H, W = all_images.shape
-        all_poses = data["poses"]  # .to(device=device)  # (SB, NV, 4, 4)
-        all_bboxes = data.get("bbox")  # (SB, NV, 4)  cmin rmin cmax rmax
+        all_poses = data["poses"][:, -1, ...]  if len(data["poses"].shape) > 4 else data["poses"] #.to(device=device)  # (SB, NV, 4, 4)
+        all_bboxes = data.get("bbox", None)  # (SB, NV, 4)  cmin rmin cmax rmax
         all_focals = data["focal"]  # (SB)
         all_c = data.get("c")  # (SB)
 
@@ -109,6 +112,7 @@ class NeRFAE(pl.LightningModule):
             image_ord = torch.randint(0, NV, (SB, 1)).to(self.device)
         else:
             image_ord = torch.empty((SB, curr_nviews), dtype=torch.long).to(self.device)
+
         for obj_idx in range(SB):
             if all_bboxes is not None:
                 bboxes = all_bboxes[obj_idx]
@@ -154,13 +158,19 @@ class NeRFAE(pl.LightningModule):
             all_images, image_ord
         )  # (SB, NS, 3, H, W)
         src_poses = util.batched_index_select_nd(all_poses, image_ord)  # (SB, NS, 4, 4)
+        src_focals = util.batched_index_select_nd(all_focals, image_ord) if len(all_focals.shape)>2 else all_focals
+
+        if all_c is not None:
+            src_cs = util.batched_index_select_nd(all_c, image_ord) if len(all_c.shape)>2 else all_c
+        else:
+            src_cs = None
 
         all_bboxes = all_poses = all_images = None
         self.net.encode(
             src_images,
             src_poses,
-            all_focals,  # .to(device=device),
-            c=all_c if all_c is not None else None,  # all_c.to(device=device)
+            src_focals,
+            c=src_cs,
         )
 
         render_dict = DotMap(self.render_par(all_rays, want_weights=True, ))
@@ -231,8 +241,9 @@ class NeRFAE(pl.LightningModule):
         else:
             print(idx)
             batch_idx = idx
-        images = data["images"][batch_idx]  # .to(device=device)  # (NV, 3, H, W)
-        poses = data["poses"][batch_idx]  # .to(device=device)  # (NV, 4, 4)
+
+        images = data["images"][batch_idx, -1] if len(data["images"].shape) >5 else data["images"][batch_idx, -1] # .to(device=device)  # (NV, 3, H, W)
+        poses = data["poses"][batch_idx, -1] if len(data["poses"].shape) > 4 else data["poses"][batch_idx]  # .to(device=device)  # (NV, 4, 4)
         focal = data["focal"][batch_idx: batch_idx + 1]  # (1)
         c = data.get("c")
         if c is not None:
@@ -264,6 +275,10 @@ class NeRFAE(pl.LightningModule):
         with torch.no_grad():
             test_rays = cam_rays[view_dest]  # (H, W, 8)
             test_images = images[views_src]  # (NS, 3, H, W)
+            focal = focal[:, views_src] if len(focal.shape) > 2 else focal
+            if c is not None:
+                c = c[:, views_src] if len(c.shape) > 2 else c
+
             self.net.encode(
                 test_images.unsqueeze(0),
                 poses[views_src].unsqueeze(0),
