@@ -2,6 +2,7 @@
 Implements image encoders
 """
 import torch
+import clip
 from torch import nn
 import torch.nn.functional as F
 import torchvision
@@ -55,26 +56,13 @@ class SpatialEncoder(nn.Module):
         if norm_type != "batch":
             assert not pretrained
 
-        self.backbone = backbone
+        self.backbone_name = backbone
         self.use_custom_resnet = backbone == "custom"
         self.feature_scale = feature_scale
         self.use_first_pool = use_first_pool
-        norm_layer = util.get_norm_layer(norm_type)
+        self.norm_layer = util.get_norm_layer(norm_type)
 
-        if self.use_custom_resnet:
-            print("WARNING: Custom encoder is experimental only")
-            print("Using simple convolutional encoder")
-            self.model = ConvEncoder(3, norm_layer=norm_layer)
-            self.latent_size = self.model.dims[-1]
-        else:
-            print("Using torchvision", backbone, "encoder")
-            self.model = getattr(torchvision.models, backbone)(
-                pretrained=pretrained, norm_layer=norm_layer
-            )
-            # Following 2 lines need to be uncommented for older configs
-            self.model.fc = nn.Sequential()
-            self.model.avgpool = nn.Sequential()
-            self.latent_size = [0, 64, 128, 256, 512, 1024][num_layers]
+        self.create_backbone(self.backbone_name, pretrained, num_layers)
 
         self.num_layers = num_layers
         self.index_interp = index_interp
@@ -117,20 +105,54 @@ class SpatialEncoder(nn.Module):
             )
             return samples[:, :, :, 0]  # (B, C, N)
 
+    def create_backbone(self, backbone, pretrained, num_layers):
+
+        if self.use_custom_resnet:
+            print("WARNING: Custom encoder is experimental only")
+            print("Using simple convolutional encoder")
+            self.model = ConvEncoder(3, norm_layer=self.norm_layer)
+            self.latent_size = self.model.dims[-1]
+
+        elif "resnet" in backbone:
+            print("Using torchvision", self.backbone_name, "encoder")
+            self.model = getattr(torchvision.models, self.backbone_name)(
+                pretrained=pretrained, norm_layer=self.norm_layer
+            )
+            self.model.fc = nn.Sequential()
+            self.model.avgpool = nn.Sequential()
+            self.latent_size = [0, 64, 128, 256, 512, 1024][num_layers] if "34" in backbone or "18" in backbone else [0, 64, 320, 832, 1856, 3902][num_layers]
+
+        elif "clip" in backbone:
+            model_name = backbone.split('_')[1]
+            model, preprocess = clip.load(model_name)
+            self.model = model.visual
+            self.preprocess = preprocess
+            #self.model.attnpool = nn.Sequential()
+            self.latent_size =  [0, 64, 320, 832, 1856, 3902][num_layers]
+
+            self.use_first_pool = False
+
     def process_input(self, x):
         """
         Preprocess image input
         :param x image (B, C, H, W)
         :return x image (B, C, H, W)
         """
-        #check if backbone is resnet
-        if 'resnet' in self.backbone:
+        # check if backbone is resnet
+        if 'resnet' in self.backbone_name:
             # normalize image
             x = x*0.5 + 0.5
             mean = torch.tensor([0.485, 0.456, 0.406]).to(x.device)
             std = torch.tensor([0.229, 0.224, 0.225]).to(x.device)
             x = (x - mean[None, :, None, None]) / std[None, :, None, None]
-        #TODO add other backbones preprocessing including clip
+
+        elif 'clip' in self.backbone_name:
+            # normalize image
+            print("normalizing image for clip backbone")
+            x = x*0.5 + 0.5
+            normalization = self.preprocess.transforms[-1]
+            x = normalization(x)
+
         if self.feature_scale != 1.0:
             x = F.interpolate(
                 x,
@@ -143,6 +165,55 @@ class SpatialEncoder(nn.Module):
 
         return x
 
+    def bb_forward(self, x):
+
+        if "resnet" in self.backbone_name:
+            x = self.model.conv1(x)
+            x = self.model.bn1(x)
+            x = self.model.relu(x)
+
+        elif "clip" in self.backbone_name:
+
+            def stem(x):
+                x = self.model.relu1(self.model.bn1(self.model.conv1(x)))
+                x = self.model.relu2(self.model.bn2(self.model.conv2(x)))
+                x = self.model.relu3(self.model.bn3(self.model.conv3(x)))
+                x = self.model.avgpool(x)
+                return x
+
+            x = x.type(self.model.conv1.weight.dtype)
+            x = stem(x)
+
+        latents = [x]
+        if self.num_layers > 1:
+            if self.use_first_pool:
+                x = self.model.maxpool(x)
+            x = self.model.layer1(x)
+            latents.append(x)
+        if self.num_layers > 2:
+            x = self.model.layer2(x)
+            latents.append(x)
+        if self.num_layers > 3:
+            x = self.model.layer3(x)
+            latents.append(x)
+        if self.num_layers > 4:
+            x = self.model.layer4(x)
+            latents.append(x)
+
+        self.latents = latents
+        align_corners = None if self.index_interp == "nearest " else True
+        latent_sz = latents[0].shape[-2:]
+        for i in range(len(latents)):
+            latents[i] = F.interpolate(
+                latents[i],
+                latent_sz,
+                mode=self.upsample_interp,
+                align_corners=align_corners,
+            )
+
+        self.latent = torch.cat(latents, dim=1)
+        return self.latent
+
     def forward(self, x):
         """
         For extracting ResNet's features.
@@ -154,42 +225,14 @@ class SpatialEncoder(nn.Module):
 
         if self.use_custom_resnet:
             self.latent = self.model(x)
+
         else:
-            x = self.model.conv1(x)
-            x = self.model.bn1(x)
-            x = self.model.relu(x)
+            self.latent = self.bb_forward(x)
 
-            latents = [x]
-            if self.num_layers > 1:
-                if self.use_first_pool:
-                    x = self.model.maxpool(x)
-                x = self.model.layer1(x)
-                latents.append(x)
-            if self.num_layers > 2:
-                x = self.model.layer2(x)
-                latents.append(x)
-            if self.num_layers > 3:
-                x = self.model.layer3(x)
-                latents.append(x)
-            if self.num_layers > 4:
-                x = self.model.layer4(x)
-                latents.append(x)
-
-            self.latents = latents
-            align_corners = None if self.index_interp == "nearest " else True
-            latent_sz = latents[0].shape[-2:]
-            for i in range(len(latents)):
-                latents[i] = F.interpolate(
-                    latents[i],
-                    latent_sz,
-                    mode=self.upsample_interp,
-                    align_corners=align_corners,
-                )
-            self.latent = torch.cat(latents, dim=1)
         self.latent_scaling[0] = self.latent.shape[-1]
         self.latent_scaling[1] = self.latent.shape[-2]
         self.latent_scaling = self.latent_scaling / (self.latent_scaling - 1) * 2.0
-        return self.latent
+        return x
 
     @classmethod
     def from_conf(cls, conf):
@@ -219,17 +262,12 @@ class ImageEncoder(nn.Module):
         """
         super().__init__()
         self.backbone_name = backbone
-        #self.model = getattr(torchvision.models, backbone)(pretrained=pretrained)
-        if backbone == "basic1":
-            print("creating basic backbone")
-            self.model = BasicBackbone()
-        elif backbone == "basic2":
-            print("creating basic2 backbone")
-            self.model = BasicBackbone2(frame_stack, image_size, layer_norm)
-        else:
-            self.model = getattr(torchvision.models, backbone)(pretrained=pretrained)
+        self.frame_stack = frame_stack
+        self.image_size = image_size
+        self.latent_size = latent_size
 
-        self.model.fc = nn.Sequential()
+        self.create_backbone(self.backbone_name, pretrained)
+
         self.register_buffer("latent", torch.empty(1, 1), persistent=False)
         # self.latent (B, L)
         self.latent_size = latent_size
@@ -255,6 +293,24 @@ class ImageEncoder(nn.Module):
                 nn.Linear(128, latent_size)
             )
 
+    def create_backbone(self, backbone, pretrained):
+        if backbone == "basic1":
+            print("creating basic backbone")
+            self.model = BasicBackbone()
+        elif backbone == "basic2":
+            print("creating basic2 backbone")
+            self.model = BasicBackbone2(self.frame_stack, self.image_size, self.layer_norm)
+        elif "resnet" in backbone:
+            self.model = getattr(torchvision.models, backbone)(pretrained=pretrained)
+
+        elif "clip" in backbone:
+
+            model_name = backbone.split('_')[1]
+            model, preprocess = clip.load(model_name)
+            self.model = model.visual
+            self.preprocess = preprocess
+            self.model.fc = nn.Linear(self.model.output_dim, 512)
+
     def index(self, uv, cam_z=None, image_size=(), z_bounds=()):
         """
         Params ignored (compatibility)
@@ -263,13 +319,36 @@ class ImageEncoder(nn.Module):
         """
         return self.latent.unsqueeze(-1).expand(-1, -1, uv.shape[1])
 
-    def forward(self, x):
-        """
-        For extracting ResNet's features.
-        :param x image (B, C, H, W) / (B*NV*T, C, H, W)
-        :return latent (B, latent_size)
-        """
+    def process_input(self, x):
+
+        if 'resnet' in self.backbone_name:
+            # normalize image
+            print("normalizing image for resnet backbone")
+            x = x * 0.5 + 0.5
+            mean, std = torch.tensor([0.485, 0.456, 0.406]), torch.tensor([0.229, 0.224, 0.225])
+            x = (x - mean[None, :, None, None]) / std[None, :, None, None]
+
+        elif 'clip' in self.backbone_name:
+            # normalize image
+            print("normalizing image for clip backbone")
+            x = x * 0.5 + 0.5
+            rsz = self.preprocess.transforms[0]
+            crop = self.preprocess.transforms[1]
+            normalization = self.preprocess.transforms[-1]
+
+            x = rsz(x)
+            x = crop(x)
+            x = normalization(x)
+
         x = x.to(device=self.latent.device)
+        return x
+
+    def forward_backbone(self, x):
+
+        if 'clip' in self.backbone_name:
+            # split self.backbone_name to get the clip model name
+            x = self.model(x)
+            x = self.model.fc(x)
 
         if self.backbone_name != "basic2":
             x = self.model.conv1(x)
@@ -288,6 +367,17 @@ class ImageEncoder(nn.Module):
 
         if self.latent_size != 512:
             x = self.fc(x)
+
+        return x
+
+    def forward(self, x):
+        """
+        For extracting ResNet's features.
+        :param x image (B, C, H, W) / (B*NV*T, C, H, W)
+        :return latent (B, latent_size)
+        """
+        x = self.process_input(x)
+        x = self.forward_backbone(x)
 
         self.latent = x  # (B, latent_size)
 
@@ -317,6 +407,7 @@ class ImageEncoder(nn.Module):
             # c (B*NV*T, 2)
             x = self.g_mlp(torch.cat([x, self.poses.flatten(1, -1), f, c], dim=-1))
             self.latent = x # (B*NV*T, latent_size) or (B*NV, latent_size)
+
         return self.latent
 
     @classmethod
@@ -329,6 +420,7 @@ class ImageEncoder(nn.Module):
             frame_stack=conf.get("frame_stack", 1),
             layer_norm=conf.get("layer_norm", False),
         )
+
 
 class FieldEncoder(nn.Module):
     """
