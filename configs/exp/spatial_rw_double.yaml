@@ -1,0 +1,152 @@
+model:
+  target: src.model.nerf_ae.NeRFAE
+  params:
+
+    renderer_config:
+      white_bkgd: false
+      no_bbox_step: 0 #10000
+      bound_floor: false
+      z_far: ${data.params.train.params.z_far}
+      z_near: ${data.params.train.params.z_near}
+      gpus:
+      ray_batch_size: 128 #1024
+      vic_radius: 0 #0.001 #0.001
+    model_config:
+      # MLP architecture
+      # Adapted for multiview
+      # Possibly too big
+      gamma: 1.0
+      base_learning_rate: 1e-4
+      use_encoder: true
+      double_encoder: true
+      freeze_enc: false #false
+      use_global_encoder: false
+      use_xyz: true
+      canon_xyz: false
+      use_code: true
+      code:
+        num_freqs: 6
+        freq_factor: 1.5
+        include_input: true
+      use_viewdirs: true
+      use_code_viewdirs: false
+      mlp_coarse:
+        type: resnet
+        n_blocks: 5
+        d_hidden: 512
+        d_out: 4
+        # Combine after 3rd layer by average
+        combine_layer: 3
+        combine_type: average
+      mlp_fine:
+        type: resnet
+        n_blocks: 5
+        d_hidden: 512
+        d_out: 4
+        combine_layer: 3
+        combine_type: average
+      nviews: '2'
+      encoder:
+        backbone: resnet34
+        pretrained: true
+        num_layers: 4
+    loss_config:
+      rgb:
+        use_l1: false
+      rgb_fine:
+        use_l1: false
+      alpha:
+        lambda_alpha: 0.0
+        clamp_alpha: 100
+        init_epoch: 5
+      lambda_coarse: 1.0
+      lambda_fine: 1.0
+      lambda_vic: 0 #0.01
+
+data:
+
+  target: main.DataModuleFromConfig
+  params:
+
+    batch_size: 4
+    num_workers: 4
+    wrap: True
+    train:
+      target: src.data.RealWorldDataset.TeleopData
+      params:
+        directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/train #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        frame_stack: 3
+        z_near: 0.1
+        z_far: 2
+        relative: true
+        frame_rate: 3
+        views:
+
+          - 1
+          - 2
+          - 0
+
+        #  - 1
+
+    validation:
+      target: src.data.RealWorldDataset.TeleopData
+      params:
+        directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/val #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        frame_stack: 3
+        frame_rate: 3
+        z_near: 0.1
+        z_far: 2
+        relative: true
+        views:
+          - 1
+          - 2
+          - 0
+
+
+        #  - 1
+
+    test:
+      target: src.data.RealWorldDataset.TeleopData
+      params:
+        directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/val
+
+        frame_stack: 3
+        frame_rate: 3
+        z_near: 0.1
+        z_far: 2
+        relative: true
+        views:
+          - 1
+          - 2
+          - 0
+
+lightning:
+
+  callbacks:
+    image_logger:
+      target: main.ImageLogger
+      params:
+        batch_frequency: 300
+        batch_frequency_val: 10
+        max_images: 2
+        clamp: true
+        
+  logger:
+    params:
+      entity: kifarid
+      project: Nerf_for_control
+
+  trainer:
+    benchmark: True
+    log_every_n_steps: 20
+    accumulate_grad_batches: 1
+    devices: 0,
+    accelerator: "gpu"
+#    limit_train_batches: 2
+#    limit_val_batches: 2
+    # limit_test_batches: 10
+    max_epochs: 1000
+#    print_interval: 2
+#    save_interval: 50
+#    vis_interval: 100
+#    eval_interval: 50

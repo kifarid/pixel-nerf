@@ -194,8 +194,8 @@ def unproj_map(width, height, f, c=None, device="cpu"):
         X, Y = [], []
         for view in range(f.shape[0]):
             Y_v, X_v = torch.meshgrid(
-                torch.arange(height, dtype=torch.float32) - c[view, 1],
-                torch.arange(width, dtype=torch.float32) - c[view, 0])
+                torch.arange(height, dtype=torch.float32).to(device) - c[view, 1],
+                torch.arange(width, dtype=torch.float32).to(device) - c[view, 0])
 
             X_v = X_v.to(device=device) / f[view, 0]
             Y_v = Y_v.to(device=device) / f[view, 1]
