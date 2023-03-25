@@ -9,7 +9,7 @@ model:
       z_far: ${data.params.train.params.z_far}
       z_near: ${data.params.train.params.z_near}
       gpus:
-      ray_batch_size: 128 #1024
+      ray_batch_size: 32 #1024
       vic_radius: 0.0006 #0.001 #0.001
     model_config:
       # MLP architecture

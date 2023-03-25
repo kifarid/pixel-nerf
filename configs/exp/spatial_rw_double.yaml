@@ -47,9 +47,9 @@ model:
         combine_type: average
       nviews: '2'
       encoder:
-        backbone: resnet34
+        backbone: clip_RN50
         pretrained: true
-        num_layers: 4
+        num_layers: 2
     loss_config:
       rgb:
         use_l1: false
@@ -75,11 +75,11 @@ data:
       target: src.data.RealWorldDataset.TeleopData
       params:
         directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/train #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
-        frame_stack: 3
+        frame_stack: 2
         z_near: 0.1
         z_far: 2
         relative: true
-        frame_rate: 3
+        frame_rate: 2
         views:
 
           - 1
@@ -92,8 +92,8 @@ data:
       target: src.data.RealWorldDataset.TeleopData
       params:
         directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/val #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
-        frame_stack: 3
-        frame_rate: 3
+        frame_stack: 2
+        frame_rate: 2
         z_near: 0.1
         z_far: 2
         relative: true
@@ -110,8 +110,8 @@ data:
       params:
         directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/val
 
-        frame_stack: 3
-        frame_rate: 3
+        frame_stack: 2
+        frame_rate: 2
         z_near: 0.1
         z_far: 2
         relative: true

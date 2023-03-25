@@ -8,4 +8,4 @@ echo "Running job $SLURM_JOB_NAME using $SLURM_JOB_CPUS_PER_NODE cpus per node w
 source ~/.bashrc
 
 sbatch bb_train_rw/train_bb_rw_spatial.sh
-sbatch bb_train_rw/train_bb_rw_spatial_double.sh
+#sbatch bb_train_rw/train_bb_rw_spatial_double_clip.sh

@@ -17,7 +17,7 @@ model:
       # Possibly too big
       gamma: 1.0
       base_learning_rate: 1e-4
-      use_encoder: true
+      use_encoder: false
       freeze_enc: false #false
       use_global_encoder: false
       use_xyz: true
@@ -45,8 +45,12 @@ model:
         combine_layer: 3
         combine_type: average
       nviews: '2'
+      src_views: 
+        - 0
+      tgt_views:
+        - 1
       encoder:
-        backbone: resnet34
+        backbone: resnet50
         pretrained: true
         num_layers: 4
     loss_config:
@@ -68,56 +72,56 @@ data:
   params:
 
     batch_size: 4
-    num_workers: 4
+    num_workers: 2
     wrap: True
     train:
       target: src.data.RealWorldDataset.TeleopData
       params:
-        directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/train #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
-        frame_stack: 3
-        z_near: 0.1
+        directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/train_1 #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        frame_stack: 1
+        z_near: 0.001
         z_far: 2
         relative: true
-        frame_rate: 3
+        frame_rate: 1
         views:
-
           - 1
           - 2
-          - 0
+#          - 0
 
         #  - 1
 
     validation:
       target: src.data.RealWorldDataset.TeleopData
       params:
-        directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/val #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
-        frame_stack: 3
-        frame_rate: 3
-        z_near: 0.1
+        directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/train_1 #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        frame_stack: 1
+        frame_rate: 1
+        z_near: 0.001
         z_far: 2
         relative: true
         views:
           - 1
           - 2
-          - 0
+ #         - 0
 
 
         #  - 1
 
-    test:
-      target: src.data.RealWorldDataset.TeleopData
-      params:
-        directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/val
+    # test:
+    #   target: src.data.RealWorldDataset.TeleopData
+    #   params:
+    #     directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/train_1_demo
 
-        frame_stack: 3
-        frame_rate: 3
-        z_near: 0.1
-        z_far: 2
-        relative: true
-        views:
-          - 1
-          - 2
-          - 0
+    #     frame_stack: 2
+    #     frame_rate: 2
+    #     z_near: 0.001
+    #     z_far: 2
+    #     relative: true
+    #     views:
+
+    #       - 1
+    #       - 2
+    #       - 0
 
 lightning:
 
@@ -144,7 +148,7 @@ lightning:
 #    limit_train_batches: 2
 #    limit_val_batches: 2
     # limit_test_batches: 10
-    max_epochs: 1000
+    max_epochs: 100000
 #    print_interval: 2
 #    save_interval: 50
 #    vis_interval: 100

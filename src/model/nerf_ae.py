@@ -57,6 +57,8 @@ class NeRFAE(pl.LightningModule):
 
         self.nviews = model_config.nviews
         self.nviews = list(map(int, self.nviews.split()))
+        self.src_views = np.array(model_config.get("src_views", None))
+        self.tgt_views = np.array(model_config.get("tgt_views", None))
         self.loss_from_config(loss_config)
         self.gamma = model_config.gamma
 
@@ -107,11 +109,16 @@ class NeRFAE(pl.LightningModule):
         all_rgb_gt = []
         all_rays = []
 
-        curr_nviews = self.nviews[torch.randint(0, len(self.nviews), ()).item()]
-        if curr_nviews == 1:
-            image_ord = torch.randint(0, NV, (SB, 1)).to(self.device)
+
+        if self.src_views is None:
+            curr_nviews = self.nviews[torch.randint(0, len(self.nviews), ()).item()]
+            if curr_nviews == 1:
+                image_ord = torch.randint(0, NV, (SB, 1)).to(self.device)
+            else:
+                image_ord = torch.empty((SB, curr_nviews), dtype=torch.long).to(self.device)
         else:
-            image_ord = torch.empty((SB, curr_nviews), dtype=torch.long).to(self.device)
+            curr_nviews = len(self.src_views)
+            image_ord = torch.tensor(self.src_views, dtype=torch.long).unsqueeze(0).repeat(SB, 1).to(self.device)
 
         for obj_idx in range(SB):
             if all_bboxes is not None:
@@ -122,7 +129,7 @@ class NeRFAE(pl.LightningModule):
             c = None
             if "c" in data:
                 c = data["c"][obj_idx]
-            if curr_nviews > 1:
+            if curr_nviews > 1 and self.src_views is None:
                 # Somewhat inefficient, don't know better way
                 image_ord[obj_idx] = torch.from_numpy(
                     np.random.choice(NV, curr_nviews, replace=False)
@@ -234,123 +241,129 @@ class NeRFAE(pl.LightningModule):
 
     def log_images(self, data, idx=None, **kwargs):
         #print("in log images")
-        if "images" not in data:
-            return {}
-        if idx is None:
-            batch_idx = np.random.randint(0, data["images"].shape[0])
-        else:
-            print(idx)
-            batch_idx = idx
-
-        images = data["images"][batch_idx, :,  -1] if len(data["images"].shape) >5 else data["images"][batch_idx, -1] # .to(device=device)  # (NV, 3, H, W)
-        poses = data["poses"][batch_idx, :, -1] if len(data["poses"].shape) > 4 else data["poses"][batch_idx]  # .to(device=device)  # (NV, 4, 4)
-        focal = data["focal"][batch_idx: batch_idx + 1]  # (1)
-        c = data.get("c")
-        if c is not None:
-            c = c[batch_idx: batch_idx + 1]  # (1)
-        NV, _, H, W = images.shape
-        cam_rays = util.gen_rays(
-            poses, W, H, focal, self.z_near, self.z_far, c=c
-        )  # (NV, H, W, 8)
-        images_0to1 = images * 0.5 + 0.5  # (NV, 3, H, W)
-
-        curr_nviews = self.nviews[torch.randint(0, len(self.nviews), (1,)).item()]
-        views_src = np.sort(np.random.choice(NV, curr_nviews, replace=False))
-        view_dest = np.random.randint(0, NV - curr_nviews)
-        for vs in range(curr_nviews):
-            view_dest += view_dest >= views_src[vs]
-        views_src = torch.from_numpy(views_src)
-
-        # set renderer net to eval mode
-        self.renderer.eval()
-        source_views = (
-            images_0to1[views_src]
-                .permute(0, 2, 3, 1)
-                .cpu()
-                .numpy()
-                .reshape(-1, H, W, 3)
-        )
-
-        gt = images_0to1[view_dest].permute(1, 2, 0).cpu().numpy().reshape(H, W, 3)
         with torch.no_grad():
-            test_rays = cam_rays[view_dest]  # (H, W, 8)
-            test_images = images[views_src]  # (NS, 3, H, W)
-            focal = focal[:, views_src] if len(focal.shape) > 2 else focal
+            if "images" not in data:
+                return {}
+            if idx is None:
+                batch_idx = np.random.randint(0, data["images"].shape[0])
+            else:
+                print(idx)
+                batch_idx = idx
+
+            images = data["images"][batch_idx, :,  -1] if len(data["images"].shape) >5 else data["images"][batch_idx, -1] # .to(device=device)  # (NV, 3, H, W)
+            poses = data["poses"][batch_idx, :, -1] if len(data["poses"].shape) > 4 else data["poses"][batch_idx]  # .to(device=device)  # (NV, 4, 4)
+            focal = data["focal"][batch_idx: batch_idx + 1]  # (1)
+            c = data.get("c")
             if c is not None:
-                c = c[:, views_src] if len(c.shape) > 2 else c
+                c = c[batch_idx: batch_idx + 1]  # (1)
+            NV, _, H, W = images.shape
+            cam_rays = util.gen_rays(
+                poses, W, H, focal, self.z_near, self.z_far, c=c
+            )  # (NV, H, W, 8)
+            images_0to1 = images * 0.5 + 0.5  # (NV, 3, H, W)
 
-            self.net.encode(
-                test_images.unsqueeze(0),
-                poses[views_src].unsqueeze(0),
-                focal,  # .to(device=device),
-                c=c if c is not None else None,  # .to(device=device)
+            curr_nviews = self.nviews[torch.randint(0, len(self.nviews), (1,)).item()] if self.src_views is None else len(self.src_views)
+            views_src = np.sort(np.random.choice(NV, curr_nviews, replace=False)) if self.src_views is None else self.src_views
+            
+            if self.tgt_views is None:
+                view_dest = np.random.randint(0, NV - curr_nviews)
+                for vs in range(curr_nviews):
+                    view_dest += view_dest >= views_src[vs]
+            else:
+                view_dest = self.tgt_views[0]
+
+            views_src = torch.from_numpy(views_src)
+
+            # set renderer net to eval mode
+            self.renderer.eval()
+            source_views = (
+                images_0to1[views_src]
+                    .permute(0, 2, 3, 1)
+                    .cpu()
+                    .numpy()
+                    .reshape(-1, H, W, 3)
             )
 
-            test_rays = test_rays.reshape(1, H * W, -1)
-            render_dict = DotMap(self.render_par(test_rays, want_weights=True))
-            coarse = render_dict.coarse
-            fine = render_dict.fine
+            gt = images_0to1[view_dest].permute(1, 2, 0).cpu().numpy().reshape(H, W, 3)
+            with torch.no_grad():
+                test_rays = cam_rays[view_dest]  # (H, W, 8)
+                test_images = images[views_src]  # (NS, 3, H, W)
+                focal = focal[:, views_src] if len(focal.shape) > 2 else focal
+                if c is not None:
+                    c = c[:, views_src] if len(c.shape) > 2 else c
 
-            using_fine = len(fine) > 0
+                self.net.encode(
+                    test_images.unsqueeze(0),
+                    poses[views_src].unsqueeze(0),
+                    focal,  # .to(device=device),
+                    c=c if c is not None else None,  # .to(device=device)
+                )
 
-            alpha_coarse_np = coarse.weights[0].sum(dim=-1).cpu().numpy().reshape(H, W)
-            rgb_coarse_np = coarse.rgb[0].cpu().numpy().reshape(H, W, 3)
-            depth_coarse_np = coarse.depth[0].cpu().numpy().reshape(H, W)
+                test_rays = test_rays.reshape(1, H * W, -1)
+                render_dict = DotMap(self.render_par(test_rays, want_weights=True))
+                coarse = render_dict.coarse
+                fine = render_dict.fine
 
-            if using_fine:
-                alpha_fine_np = fine.weights[0].sum(dim=1).cpu().numpy().reshape(H, W)
-                depth_fine_np = fine.depth[0].cpu().numpy().reshape(H, W)
-                rgb_fine_np = fine.rgb[0].cpu().numpy().reshape(H, W, 3)
+                using_fine = len(fine) > 0
 
-        print("c rgb min {} max {}".format(rgb_coarse_np.min(), rgb_coarse_np.max()))
-        print(
-            "c alpha min {}, max {}".format(
-                alpha_coarse_np.min(), alpha_coarse_np.max()
-            )
-        )
-        alpha_coarse_cmap = util.cmap(alpha_coarse_np) / 255
-        depth_coarse_cmap = util.cmap(depth_coarse_np) / 255
-        vis_list = [
-            *source_views,
-            gt,
-            depth_coarse_cmap,
-            rgb_coarse_np,
-            alpha_coarse_cmap,
-        ]
+                alpha_coarse_np = coarse.weights[0].sum(dim=-1).cpu().numpy().reshape(H, W)
+                rgb_coarse_np = coarse.rgb[0].cpu().numpy().reshape(H, W, 3)
+                depth_coarse_np = coarse.depth[0].cpu().numpy().reshape(H, W)
 
-        vis_coarse = np.hstack(vis_list)
-        vis = vis_coarse
+                if using_fine:
+                    alpha_fine_np = fine.weights[0].sum(dim=1).cpu().numpy().reshape(H, W)
+                    depth_fine_np = fine.depth[0].cpu().numpy().reshape(H, W)
+                    rgb_fine_np = fine.rgb[0].cpu().numpy().reshape(H, W, 3)
 
-        if using_fine:
-            print("f rgb min {} max {}".format(rgb_fine_np.min(), rgb_fine_np.max()))
+            print("c rgb min {} max {}".format(rgb_coarse_np.min(), rgb_coarse_np.max()))
             print(
-                "f alpha min {}, max {}".format(
-                    alpha_fine_np.min(), alpha_fine_np.max()
+                "c alpha min {}, max {}".format(
+                    alpha_coarse_np.min(), alpha_coarse_np.max()
                 )
             )
-            depth_fine_cmap = util.cmap(depth_fine_np) / 255
-            alpha_fine_cmap = util.cmap(alpha_fine_np) / 255
+            alpha_coarse_cmap = util.cmap(alpha_coarse_np) / 255
+            depth_coarse_cmap = util.cmap(depth_coarse_np) / 255
             vis_list = [
                 *source_views,
                 gt,
-                depth_fine_cmap,
-                rgb_fine_np,
-                alpha_fine_cmap,
+                depth_coarse_cmap,
+                rgb_coarse_np,
+                alpha_coarse_cmap,
             ]
 
-            vis_fine = np.hstack(vis_list)
-            vis = np.vstack((vis_coarse, vis_fine))
-            rgb_psnr = rgb_fine_np
-        else:
-            rgb_psnr = rgb_coarse_np
+            vis_coarse = np.hstack(vis_list)
+            vis = vis_coarse
 
-        psnr = util.psnr(rgb_psnr, gt)
-        self.log("psnr", psnr, on_step=False, on_epoch=True)
-        # set the renderer network back to train mode
-        self.renderer.train()
+            if using_fine:
+                print("f rgb min {} max {}".format(rgb_fine_np.min(), rgb_fine_np.max()))
+                print(
+                    "f alpha min {}, max {}".format(
+                        alpha_fine_np.min(), alpha_fine_np.max()
+                    )
+                )
+                depth_fine_cmap = util.cmap(depth_fine_np) / 255
+                alpha_fine_cmap = util.cmap(alpha_fine_np) / 255
+                vis_list = [
+                    *source_views,
+                    gt,
+                    depth_fine_cmap,
+                    rgb_fine_np,
+                    alpha_fine_cmap,
+                ]
 
-        vis_t=torch.from_numpy(vis).unsqueeze(0).permute(0, 3, 1, 2)
-        vis_dict = {"images": vis_t}
+                vis_fine = np.hstack(vis_list)
+                vis = np.vstack((vis_coarse, vis_fine))
+                rgb_psnr = rgb_fine_np
+            else:
+                rgb_psnr = rgb_coarse_np
+
+            psnr = util.psnr(rgb_psnr, gt)
+            self.log("psnr", psnr, on_step=False, on_epoch=True)
+            # set the renderer network back to train mode
+            self.renderer.train()
+
+            vis_t=torch.from_numpy(vis).unsqueeze(0).permute(0, 3, 1, 2)
+            vis_dict = {"images": vis_t}
         return vis_dict
 
     def init_from_ckpt(self, path, ignore_keys=list()):

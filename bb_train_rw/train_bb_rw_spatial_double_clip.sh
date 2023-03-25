@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --partition=alldlc_gpu-rtx2080 # partition
-#SBATCH --array=1
+#SBATCH --array=1-3
 #SBATCH --mem=8Gb # RAM memory pool for each core (4GB)
 #SBATCH -t 0-24:00 # time (D-HH:MM)
 #SBATCH -c 16 # number of CPU cores you need
-# #SBATCH --gres=gpu:1 # indicate that we need 1 gpu (maximum 8)
+#SBATCH --gres=gpu:1 # indicate that we need 1 gpu (maximum 8)
 #SBATCH -D /home/faridk/pixel-nerf # the directory where the job starts
-#SBATCH -o logs_rw_bb/%x.%N.%j.%a.%A.out # log STDOUT to a file
+#SBATCH -o logs_rw_bb_clip/%x.%N.%j.%a.%A.out # log STDOUT to a file
 #SBATCH --mail-type=END,FAIL # (receive mails about end and timeouts/crashes of your job)
 
 ##'0 1' \
@@ -18,9 +18,9 @@ source ~/.bashrc
 conda activate nerf_rl
 echo "activated env"
 
-export EXP_NAME=rw_spatial_1'_'$SLURM_ARRAY_TASK_ID
+export EXP_NAME=rw_bb_rw_spatial_mask_double_clip'_'$SLURM_ARRAY_TASK_ID
 python -m main -n $EXP_NAME \
---base configs/default_mv_lgn.yaml configs/exp/spatial_rw.yaml \
+--base configs/default_mv_lgn.yaml configs/exp/spatial_rw_double.yaml \
 -t \
 -l /work/dlclarge2/faridk-nerf_il/logs/backbones \
 -s $SLURM_ARRAY_TASK_ID

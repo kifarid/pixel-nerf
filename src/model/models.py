@@ -112,7 +112,7 @@ class PixelNeRFNet(torch.nn.Module):
         :param c principal point None or () or (2) or (NS) or (NS, 2) [cx, cy],
         default is center of image
         """
-        assert self.use_encoder or self.use_global_encoder
+        #assert self.use_encoder or self.use_global_encoder
         self.num_objs = images.size(0)
         if len(images.shape) == 5:
             assert len(poses.shape) == 4
@@ -188,7 +188,7 @@ class PixelNeRFNet(torch.nn.Module):
     def transform_to_cam(self, xyz_local):
         NS = self.num_views_per_obj
         divisor = xyz_local[:, :, 2:]
-        divisor = torch.where(torch.abs(divisor) > 1e-4, divisor, torch.full(divisor.size(), 1e-4).to(divisor))
+        divisor = torch.where(torch.abs(divisor) > 5e-3, divisor, torch.full(divisor.size(), 5e-3).to(divisor))
         uv = -xyz_local[:, :, :2] / divisor  # (SB, B, 2)
 
         uv *= repeat_interleave(

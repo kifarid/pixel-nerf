@@ -124,13 +124,13 @@ class SpatialEncoder(nn.Module):
 
         elif "clip" in backbone:
             model_name = backbone.split('_')[1]
-            model, preprocess = clip.load(model_name)
+            model, preprocess = clip.load(model_name, device = 'cpu')
             self.model = model.visual
+            self.model.train()
             self.preprocess = preprocess
             #self.model.attnpool = nn.Sequential()
             self.latent_size =  [0, 64, 320, 832, 1856, 3902][num_layers]
 
-            self.use_first_pool = False
 
     def process_input(self, x):
         """
@@ -148,7 +148,6 @@ class SpatialEncoder(nn.Module):
 
         elif 'clip' in self.backbone_name:
             # normalize image
-            print("normalizing image for clip backbone")
             x = x*0.5 + 0.5
             normalization = self.preprocess.transforms[-1]
             x = normalization(x)
@@ -178,7 +177,6 @@ class SpatialEncoder(nn.Module):
                 x = self.model.relu1(self.model.bn1(self.model.conv1(x)))
                 x = self.model.relu2(self.model.bn2(self.model.conv2(x)))
                 x = self.model.relu3(self.model.bn3(self.model.conv3(x)))
-                x = self.model.avgpool(x)
                 return x
 
             x = x.type(self.model.conv1.weight.dtype)
@@ -187,7 +185,7 @@ class SpatialEncoder(nn.Module):
         latents = [x]
         if self.num_layers > 1:
             if self.use_first_pool:
-                x = self.model.maxpool(x)
+                x = self.model.maxpool(x) if "resnet" in self.backbone_name else self.model.avgpool(x)
             x = self.model.layer1(x)
             latents.append(x)
         if self.num_layers > 2:
@@ -306,7 +304,7 @@ class ImageEncoder(nn.Module):
         elif "clip" in backbone:
 
             model_name = backbone.split('_')[1]
-            model, preprocess = clip.load(model_name)
+            model, preprocess = clip.load(model_name, device = 'cpu')
             self.model = model.visual
             self.preprocess = preprocess
             self.model.fc = nn.Linear(self.model.output_dim, 512)
@@ -323,14 +321,12 @@ class ImageEncoder(nn.Module):
 
         if 'resnet' in self.backbone_name:
             # normalize image
-            print("normalizing image for resnet backbone")
             x = x * 0.5 + 0.5
             mean, std = torch.tensor([0.485, 0.456, 0.406]), torch.tensor([0.229, 0.224, 0.225])
             x = (x - mean[None, :, None, None]) / std[None, :, None, None]
 
         elif 'clip' in self.backbone_name:
             # normalize image
-            print("normalizing image for clip backbone")
             x = x * 0.5 + 0.5
             rsz = self.preprocess.transforms[0]
             crop = self.preprocess.transforms[1]
