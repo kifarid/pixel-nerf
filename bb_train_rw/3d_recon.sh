@@ -6,7 +6,5 @@ echo "Running job $SLURM_JOB_NAME using $SLURM_JOB_CPUS_PER_NODE cpus per node w
 
 # shellcheck disable=SC1091
 source ~/.bashrc
-
-#sbatch bb_train_rw/train_bb_rw_spatial_clip.sh
-sbatch bb_train_rw/train_bb_rw_spatial_double_clip.sh
-#sbatch bb_train_rw/train_bb_rw_spatial_resume.sh
+sbatch bb_train_rw/train_recon.sh
+#sbatch bb_train_rw/train_bb_rw_spatial_double_clip.sh

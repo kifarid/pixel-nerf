@@ -57,8 +57,10 @@ class NeRFAE(pl.LightningModule):
 
         self.nviews = model_config.nviews
         self.nviews = list(map(int, self.nviews.split()))
-        self.src_views = np.array(model_config.get("src_views", None))
-        self.tgt_views = np.array(model_config.get("tgt_views", None))
+        self.src_views = model_config.get("src_views", None)
+        self.tgt_views = model_config.get("tgt_views", None)
+        self.src_views = np.array(self.src_views) if self.src_views is not None else None
+        self.tgt_views = np.array(self.tgt_views) if self.tgt_views is not None else None
         self.loss_from_config(loss_config)
         self.gamma = model_config.gamma
 

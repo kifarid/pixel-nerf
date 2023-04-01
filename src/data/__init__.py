@@ -4,6 +4,7 @@ from .MultiObjectDataset import MultiObjectDataset
 from .DVRDataset import DVRDataset
 from .SRNDataset import SRNDataset
 from .RavensDataset import RDataset
+from .RealWorldDataset import TeleopData
 
 from .data_util import ColorJitterDataset
 
@@ -47,6 +48,14 @@ def get_split_dataset(dataset_type, datadir, want_split="all", training=True, **
             # Apply color jitter during train
             train_aug = ColorJitterDataset
             train_aug_flags = {"extra_inherit_attrs": ["sub_format"]}
+    
+    elif dataset_type == "rw":
+        dset_class = TeleopData
+        flags["t_views"] = False
+        flags["frame_rate"] = 1
+        flags["frame_stack"] = 1
+        flags["views"] =[2, 1, 0] #[2, 1, 0]
+    
     else:
         raise NotImplementedError("Unsupported dataset type", dataset_type)
 

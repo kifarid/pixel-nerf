@@ -47,7 +47,7 @@ model:
         combine_type: average
       nviews: '2'
       encoder:
-        backbone: clip_RN50
+        backbone: resnet50
         pretrained: true
         num_layers: 2
     loss_config:

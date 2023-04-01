@@ -17,7 +17,7 @@ model:
       # Possibly too big
       gamma: 1.0
       base_learning_rate: 1e-4
-      use_encoder: false
+      use_encoder: true
       freeze_enc: false #false
       use_global_encoder: false
       use_xyz: true
@@ -44,13 +44,13 @@ model:
         d_out: 4
         combine_layer: 3
         combine_type: average
-      nviews: '2'
+      nviews: '3'
       # src_views: 
       #   - 0
       # tgt_views:
       #   - 1
       encoder:
-        backbone: clip_RN50
+        backbone: resnet50
         pretrained: true
         num_layers: 4
     loss_config:
@@ -77,51 +77,28 @@ data:
     train:
       target: src.data.RealWorldDataset.TeleopData
       params:
-        directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/train #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
-        frame_stack: 1
-        z_near: 0.001
+        directory: /work/dlclarge2/faridk-nerf_il/data/content #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        frame_stack: 8
+        z_near: 0.01
         z_far: 2
         relative: true
-        frame_rate: 1
+        t_views: true
+        frame_rate: 12
         views:
-          - 1
-          - 2
           - 0
-
-        #  - 1
 
     validation:
       target: src.data.RealWorldDataset.TeleopData
       params:
-        directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/train_1 #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
-        frame_stack: 1
-        frame_rate: 1
-        z_near: 0.001
+        directory: /work/dlclarge2/faridk-nerf_il/data/content #/work/dlclarge2/faridk-nerf_rl/old/srn_block_insertion/block_insertion
+        frame_stack: 8
+        frame_rate: 12
+        t_views: true
+        z_near: 0.01
         z_far: 2
         relative: true
         views:
-          - 1
-          - 2
           - 0
-
-
-        #  - 1
-
-    # test:
-    #   target: src.data.RealWorldDataset.TeleopData
-    #   params:
-    #     directory: /work/dlclarge2/faridk-nerf_il/data/expert_data/train_1_demo
-
-    #     frame_stack: 2
-    #     frame_rate: 2
-    #     z_near: 0.001
-    #     z_far: 2
-    #     relative: true
-    #     views:
-
-    #       - 1
-    #       - 2
-    #       - 0
 
 lightning:
 

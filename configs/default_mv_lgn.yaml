@@ -37,14 +37,14 @@ model:
         combine_type: average
       nviews: "1"
       encoder:
-        backbone: resnet34
+        backbone: clip_RN50
         pretrained: true
         num_layers: 4
     renderer_config:
       n_coarse: 64 #64
       n_fine: 32 #32
       n_fine_depth: 16 #16
-      depth_std: 0.005
+      depth_std: 0.001
       white_bkgd: true
     loss_config:
       rgb:

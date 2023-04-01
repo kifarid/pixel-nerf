@@ -421,10 +421,10 @@ class PixelNeRFNet(torch.nn.Module):
         if opt_init and not args.resume:
             return
         ckpt_name = (
-            "pixel_nerf_init" if opt_init or not args.resume else "pixel_nerf_latest"
+            "pixel_nerf_init" if opt_init or not args.resume else "last.ckpt"
         )
-        model_path = "%s/%s/%s" % (args.checkpoints_path, args.name, ckpt_name)
-
+        #model_path = "%s/%s/%s" % (args.checkpoints_path, args.name, "c" ckpt_name)
+        model_path = os.path.join(args.checkpoints_path, args.name, "checkpoints", ckpt_name)
         if device is None:
             device = self.poses.device
 

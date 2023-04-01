@@ -10,7 +10,7 @@ from scipy.spatial.transform.rotation import Rotation as R
 # import dataloader
 from torch.utils.data import DataLoader
 
-from src.util import get_image_to_tensor_balanced, dict_to_tensor
+from src.util import get_image_to_tensor_balanced, dict_to_tensor, repeat_interleave
 
 
 def plot_coordinate_frame(image, cam_matrix, frame, length=0.1, thickness=2, wait=True):
@@ -96,7 +96,12 @@ def load_episode(episode):
         except Exception as e:
             print(f"error {e} skipping invalid data {path}, {i}")
             continue
+    
+    #print(f"loaded {len(episode_filtered)} frames")
 
+    if len(episode_filtered) == 0:
+        return {}
+    
     episode = {}
     keys = episode_filtered[0].keys()
     for k in keys:
@@ -248,9 +253,9 @@ class Episode(dict):
 # create a data wrapper class fom the teleop_data
 class TeleopData(torch.utils.data.Dataset):
 
-    def __init__(self, directory, stage="train", z_near=0.1, z_far=2, frame_rate=1, frame_stack=1,
+    def __init__(self, directory, stage="train", z_near=0.01, z_far=2, frame_rate=1, frame_stack=1,
                  image_size=(150, 200), relative=True, action_from_next_state=False, world_scale=1.0, views=None,
-                 image_scale=1.0, allow_reverse=True, state_keys=None, image_keys=None, ):
+                 image_scale=1.0, allow_reverse=True, state_keys=None, image_keys=None, t_views= False):
 
         self.directory = directory
         self.frame_stack = frame_stack
@@ -298,6 +303,7 @@ class TeleopData(torch.utils.data.Dataset):
 
         self.state_keys = state_keys
         self.image_keys = image_keys
+        self.t_views = t_views
 
     def process_intrinsics(self, intrinsics):
 
@@ -349,13 +355,15 @@ class TeleopData(torch.utils.data.Dataset):
         # convert from files to a dict
         self.cam_info = dict(self.cam_info)
         # build the intrinisic matrix for all cameras
-        static_intrinsic = self.cam_info["static_intrinsics"]
-        self.cam_info["static_intrinsics"] = self.build_intrinsics(static_intrinsic[None][0])
-        # create the camera matrix from the intrinsics
+        if "static_intrinsics" in self.cam_info:
+            static_intrinsic = self.cam_info["static_intrinsics"]
+            self.cam_info["static_intrinsics"] = self.build_intrinsics(static_intrinsic[None][0])
+            # create the camera matrix from the intrinsics
 
         # repeat for the dynamic camera
-        dynamic_intrinsic = self.cam_info["gripper_intrinsics"]
-        self.cam_info["gripper_intrinsics"] = self.build_intrinsics(dynamic_intrinsic[None][0])
+        if "gripper_intrinsics" in self.cam_info:
+            dynamic_intrinsic = self.cam_info["gripper_intrinsics"]
+            self.cam_info["gripper_intrinsics"] = self.build_intrinsics(dynamic_intrinsic[None][0])
         return self.cam_info
 
     def get_teleop_data(self):
@@ -365,7 +373,10 @@ class TeleopData(torch.utils.data.Dataset):
             epi_start_end_ids = np.load(ep_start_end_paths, allow_pickle=True)
             sub_episodes = [frames[start:end] for start, end in epi_start_end_ids]
             for sub_episode in sub_episodes:
-                episodes.append(Episode(sub_episode))
+                episode_obj = Episode(sub_episode)
+                # check if the episode obj is an empty dict
+                if len(episode_obj.keys()) > 0:
+                    episodes.append(episode_obj)
 
         self.episodes = episodes
         # stop here
@@ -467,35 +478,45 @@ class TeleopData(torch.utils.data.Dataset):
         tcp_pose = get_tcp_pose(sample["robot_state"]["tcp_pos"],
                                 sample["robot_state"]["tcp_orn"])  # (T, 4, 4) or (4, 4)
         # getting gripper cam info
-        intrin_gripper = self.cam_info["gripper_intrinsics"]
-        pose_T_tcp_cam = self.cam_info["gripper_extrinsic_calibration"]
-        gripper_poses = torch.tensor(tcp_pose @ pose_T_tcp_cam, dtype=torch.float32)  # (T, 4, 4) or (4, 4)
-
-        scale_x, scale_y = 1, 1
-        if images[0].shape[-2:] != self.image_size:
-            scale_y, scale_x = self.image_size[0] / images_shps[0][0], self.image_size[1] / \
-                               images_shps[0][1]
-        cx.append(intrin_gripper["cx"] * scale_x)
-        cy.append(intrin_gripper["cy"] * scale_y)
-        fx.append(intrin_gripper["fx"] * scale_x)
-        fy.append(intrin_gripper["fy"] * scale_y)
-
-        for i, (intrin, pose) in enumerate(
-                zip(self.cam_info["static_intrinsics"], self.cam_info["static_extrinsic_calibration"]), start=1):
+        if "gripper_intrinsics" in self.cam_info:
+            intrin_gripper = self.cam_info["gripper_intrinsics"]
+            pose_T_tcp_cam = self.cam_info["gripper_extrinsic_calibration"]
+            gripper_poses = torch.tensor(tcp_pose @ pose_T_tcp_cam, dtype=torch.float32)  # (T, 4, 4) or (4, 4)
+            gripper_poses = gripper_poses if self.frame_stack > 1 else gripper_poses.unsqueeze(0) 
             scale_x, scale_y = 1, 1
-            if images[i].shape[-2:] != self.image_size:
-                scale_x, scale_y = self.image_size[0] / images_shps[i][0], self.image_size[1] / \
-                                   images_shps[i][1]
-            cx.append(intrin["cx"] * scale_x)
-            cy.append(intrin["cy"] * scale_y)
-            fx.append(intrin["fx"] * scale_x)
-            fy.append(intrin["fy"] * scale_y)
-            poses.append(torch.tensor(pose, dtype=torch.float32))
+            if images[0].shape[-2:] != self.image_size:
+                scale_y, scale_x = self.image_size[0] / images_shps[0][0], self.image_size[1] / \
+                                images_shps[0][1]
+            cx.append(intrin_gripper["cx"] * scale_x)
+            cy.append(intrin_gripper["cy"] * scale_y)
+            fx.append(intrin_gripper["fx"] * scale_x)
+            fy.append(intrin_gripper["fy"] * scale_y)
 
-        poses = torch.stack(poses, dim=0).unsqueeze(1).repeat(1, self.frame_stack, 1,
+        if "static_intrinsics" in self.cam_info:
+            for i, (intrin, pose) in enumerate(
+                    zip(self.cam_info["static_intrinsics"], self.cam_info["static_extrinsic_calibration"]), start=1):
+                scale_x, scale_y = 1, 1
+                if images[i].shape[-2:] != self.image_size:
+                    scale_x, scale_y = self.image_size[0] / images_shps[i][0], self.image_size[1] / \
+                                    images_shps[i][1]
+                cx.append(intrin["cx"] * scale_x)
+                cy.append(intrin["cy"] * scale_y)
+                fx.append(intrin["fx"] * scale_x)
+                fy.append(intrin["fy"] * scale_y)
+                poses.append(torch.tensor(pose, dtype=torch.float32))
+
+            poses = torch.stack(poses, dim=0).unsqueeze(1).repeat(1, self.frame_stack, 1,
                                                               1)  # repeat for frame stack (N, T, 4, 4)
-        gripper_poses = gripper_poses if self.frame_stack > 1 else gripper_poses.unsqueeze(0)  # (T, 4, 4)
-        poses = torch.cat([gripper_poses.unsqueeze(0), poses])
+        
+
+        if "gripper_intrinsics" in self.cam_info and "static_intrinsics" in self.cam_info:
+            poses = torch.cat([gripper_poses.unsqueeze(0), poses])
+        elif "gripper_intrinsics" in self.cam_info:
+            poses = gripper_poses.unsqueeze(0)
+        elif "static_intrinsics" in self.cam_info:
+            poses = poses
+        else:
+            raise ValueError("No camera info found")
 
         f = torch.tensor([fx, fy], dtype=torch.float32).T
         c = torch.tensor([cx, cy], dtype=torch.float32).T
@@ -508,8 +529,6 @@ class TeleopData(torch.utils.data.Dataset):
             images_tensor = images_tensor[self.views]
             poses = poses[self.views]
             f = f[self.views]
-            # cx = cx[self.views]
-            # cy = cy[self.views]
             c = c[self.views]
 
         if self.action_from_next_state:
@@ -527,12 +546,19 @@ class TeleopData(torch.utils.data.Dataset):
 
             action = self.get_relative_action(robot_state_last_t, action)
 
+        if self.t_views:
+            #  images from (N, T, C, H, W) to (NxT ,1, C, H, W) ordered as view1_t1, view1_t2, ..., view2_t1, view2_t2, ...
+            #  poses from (N, T, 4, 4) to (NxT, 1, 4, 4) ordered as view1_t1, view1_t2, ..., view2_t1, view2_t2, ...
+            images_tensor = images_tensor.reshape(-1, 1, *images_tensor.shape[2:])
+            poses = poses.reshape(-1, 1, *poses.shape[2:])
+            f = repeat_interleave(f, self.frame_stack) #f.repeat(self.frame_stack, 1)
+            c = repeat_interleave(c, self.frame_stack) #c.repeat(self.frame_stack, 1)
+
+
         result = {
             "images": images_tensor,  # .squeeze(),
             "poses": poses@self._coord_trans,  # .squeeze(),
             "focal": f,  # .squeeze(),
-            # "cx": torch.Tensor(cx).squeeze(),
-            # "cy": torch.Tensor(cy).squeeze(),
             "c": c,  # .squeeze(),
             "ref": ref,
             "robot_state": robot_state,
