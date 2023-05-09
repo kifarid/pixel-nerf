@@ -30,3 +30,5 @@ logs_rw/
 outputs/
 logs_rw_bb/
 envs/ravens
+
+*egg-info
